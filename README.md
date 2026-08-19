@@ -1,16 +1,14 @@
 # Swarm
 
-A team of AI terminals on one Mac, steered from your iPhone.
+A team of AI terminals on one Mac. Use it on the Mac, then take the same team over on your iPhone.
 
-Each bot is a real terminal AI — [Grok](https://grok.com), [Claude](https://claude.ai/code), ChatGPT ([Codex](https://github.com/openai/codex)), Gemini, Aider, OpenCode, Cursor, or any other CLI on your Mac. Mix them on the same roster. Each bot has its own Chrome.
+**Built first for [Grok Build](https://grok.com).** The work happens in those terminals. Swarm is the roster, the queue, and the remote — so you can run several Grok sessions at once without leaving the sofa.
 
-Not a cloud chatbot. Swarm is the control plane: hidden `tmux` sessions, one live chat per bot, one browser per bot, and a phone UI over Wi‑Fi or 5G.
-
-The models still do the work. Swarm is how you run several at once, without leaving the sofa.
+It also runs [Claude](https://claude.ai/code), ChatGPT ([Codex](https://github.com/openai/codex)), Gemini, Aider, OpenCode, Cursor, or any other CLI on your Mac. If it lives in a terminal, it can be a Swarm bot. Each bot has its own Chrome.
 
 ## What you get
 
-- **Bots** — any AI that runs in a terminal. Grok, Claude, ChatGPT, Gemini, … switch per bot. Each one has its own browser.
+- **Bots** — Grok Build first; also Claude, ChatGPT, Gemini, or any other terminal CLI. Each one has its own browser.
 - **Phone UI** — chats, Stop that cancels the current turn, live pills, loops, files
 - **Overleg** — bots pass work to each other as normal user turns
 - **Browser** — each bot gets its own Chrome (`gbrowse`); the phone follows the open chat
@@ -37,7 +35,7 @@ cd swarm
 ./install.sh
 ```
 
-That installs `tmux` + Python if needed, a venv, and starts Swarm. Open the **Wi‑Fi** URL on your iPhone → tap **+ Bot** → pick Grok, Claude, or ChatGPT → send.
+That installs `tmux` + Python if needed, a venv, and starts Swarm. Use it in the Mac window, or open the **Wi‑Fi** URL on your iPhone and take the same bots over. Tap **+ Bot** → pick Grok (or another CLI) → send. Sign-in for that CLI happens in Swarm.
 
 Per-bot Chrome: `./install.sh --browser`
 

@@ -8,7 +8,7 @@ Usual path — one command after clone:
 
 Add `--browser` for a Chrome per bot. Below is the manual version if that script cannot run.
 
-Swarm runs on **your Mac**. The phone is only the remote.
+Swarm was built for **Grok Build** first. You work on the Mac; the phone takes the same team over. Other terminal CLIs (Claude, ChatGPT, Gemini, …) can be bots too.
 
 ## 1. macOS tools
 
