@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.76"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.78"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -225,7 +225,8 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 #chatlog:not(.termish) > .msg.file:first-child,
 #chatlog:not(.termish) > .msg.fwd:first-child,
 #chatlog:not(.termish) > .msg.progress:first-child{margin-top:auto}
-#turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);z-index:8}
+#turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);position:relative;z-index:12;isolation:isolate;overflow:hidden}
+#turnsticky .acts,#turnsticky .copy,#turnsticky .reply{display:none !important}
 #turnsticky.on{display:flex}
 #turnsticky .term-user{margin:0;max-width:100%;width:100%;align-self:stretch;padding:8px 0}
 #turnsticky.many .term-user + .term-user{border-top:1px solid var(--line);margin-top:2px;padding-top:10px}
@@ -321,7 +322,8 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 [data-theme=dark] .waitpill.on{box-shadow:0 0 0 2px #4ade80}
 [data-theme=dark] .waitpill .dots3 i{background:#4ade80}
 [data-theme=dark] #agentinfo{background:#161a24;border-color:#262b38}
-.msg .acts{display:flex;gap:2px;opacity:0;align-items:center;position:absolute;left:0;top:100%;margin-top:0;height:22px;z-index:3;pointer-events:none}
+.msg{padding-bottom:24px}
+.msg .acts{display:flex;gap:2px;opacity:0;align-items:center;position:absolute;left:0;top:auto;bottom:0;margin-top:0;height:22px;z-index:1;pointer-events:none}
 .msg.user .acts{left:auto;right:0}
 .msg:hover .acts,.msg:focus-within .acts{opacity:1;pointer-events:auto}
 .msg .reply{border:0;background:transparent;color:var(--muted);width:22px;height:22px;min-width:22px;border-radius:8px;font-size:14px;padding:0;line-height:1;cursor:pointer;opacity:.8}
@@ -482,7 +484,9 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   #mhead #talk{display:none}
   #mico-wrap.av{width:36px;height:36px;flex-basis:36px}
   #mico{width:36px;height:36px;border-radius:12px}
-  .msg .acts{position:static;height:auto;opacity:.85;pointer-events:auto;margin-top:1px}
+  .msg{padding-bottom:0}
+  .msg .acts{position:static;height:auto;opacity:.85;pointer-events:auto;margin-top:1px;z-index:1}
+  #chatlog.termish .msg .acts{display:none}
   .msg .copy{width:36px;height:36px;min-width:36px;font-size:20px}
   .msg .reply{width:36px;height:36px;min-width:36px;font-size:18px}
   .msg,.bubble{max-width:100%}
@@ -1742,6 +1746,18 @@ function termUsers(term){
   });
   return out;
 }
+function termTailUsers(term){
+  const out=[];
+  const rows=term||[];
+  for(let i=rows.length-1;i>=0;i--){
+    const k=(rows[i]&&rows[i].kind)||"";
+    if(k==="assistant") break;
+    if(k!=="user") continue;
+    const t=String(rows[i].text||"").trim();
+    if(t) out.unshift(t);
+  }
+  return out;
+}
 function openTurnUsers(msgs){
   const tail=[];
   const list=msgs||[];
@@ -1787,23 +1803,31 @@ function stickyPills(msgs, term, extra){
     t=String(t||"").trim();
     if(!t) return;
     const n=normMsg(t);
-    if(!n||seen.has(n)) return;
+    if(!n) return;
+    if(seen.has(n)) return;
+    for(const x of seen){ if(x.startsWith(n)||n.startsWith(x)) return; }
     seen.add(n);
     raw.push(t);
   }
-  termUsers(term).forEach(add);
-  openTurnUsers(msgs).forEach(add);
-  (lastSticky||[]).forEach(add);
+  const live=openTurnUsers(msgs);
+  const tu=termTailUsers(term);
+  const active=live[0]||tu[0]||"";
+  if(active) add(active);
+  live.slice(1).forEach(add);
+  tu.forEach(add);
   if(extra!=null && extra!==false){
-    (Array.isArray(extra)?extra:[extra]).forEach(add);
+    (Array.isArray(extra)?extra:[extra]).forEach(t=>{
+      if(normMsg(t)===normMsg(active)) return;
+      add(t);
+    });
   }
+  if(!raw.length && lastSticky&&lastSticky.length && current && showBusy(current)) add(lastSticky[0]);
   const out=[];
   collapsePills(raw).forEach(t=>splitUserItems(t).forEach(x=>{
     if(x && !out.some(y=>normMsg(y)===normMsg(x))) out.push(x);
   }));
-  const inTerm=new Set(termUsers(term).map(normMsg));
-  lastSticky=out.filter(t=>!inTerm.has(normMsg(t)) && ![...inTerm].some(n=>n.startsWith(normMsg(t))||normMsg(t).startsWith(n))).slice(-4);
-  return out.slice(-4);
+  lastSticky=out.slice(0,2);
+  return lastSticky;
 }
 function dropSticky(text){
   const n=normMsg(text);
@@ -2336,10 +2360,6 @@ function placeSteer(text){
   if(!pending[id].some(m=>m.role==="user" && normMsg(m.text)===normMsg(text))){
     pending[id].push({role:"user", text, at:Date.now()});
   }
-  const msgs=chatCache[id]||[];
-  if(!msgs.some(m=>m.role==="user" && normMsg(m.text)===normMsg(text))){
-    chatCache[id]=msgs.concat([{role:"user", text, at:Date.now()}]);
-  }
   lastChatKey="";
   pinNext=true;
   lastSteered={chat:id, text, at:Date.now(), by:(lastSteered&&lastSteered.by)||"swarm"};
@@ -2803,7 +2823,6 @@ $("composer").onsubmit=async ev=>{
   }
   sending=true; box.value="";
   pending[dest]=pending[dest]||[];
-  paintSticky(text);
   if(looksLeak(text)){
     try{
       const sent=await api("/api/type",{method:"POST",body:JSON.stringify(typePayload(destWin,text,true))});
