@@ -255,17 +255,17 @@ def role_card(slug: str, meta: dict, roster: dict) -> str:
             f"Team: {team}.\n"
             "- You assign work. Do not do ads, SEO, X or App Store yourself if a specialist exists.\n"
             "- Typed to you: Swarm forwards automatically to the right bot (Degero, ADS, X, …).\n"
-            "- Manual: huddle to one name, or `all` (you only).\n"
-            "- Workers may not broadcast. One owner per job.\n"
-            "- When someone is done: read it, forward it, or close it."
+            "- Manual: huddle to one owner. Never `to: all` (Tim does that in Swarm).\n"
+            "- Workers do not huddle. They write SHARED.md or wait. Ack/STOP-ack is noise — ignore it.\n"
+            "- When someone is done: read SHARED.md, forward real work, or close it. Do not ack-pingpong."
         )
     return (
         f"You are **{label}**, a worker in Swarm.\n"
         f"Role: {role}\n"
         f"Team: {team}.\n"
-        "- The boss delegates; you do your part and report back briefly.\n"
-        "- Huddle only to the boss or one specialist. Never `to: all`.\n"
-        "- Stay in your role. Other work: send it to the boss."
+        "- The boss delegates; you do your part and stop. Do not ack.\n"
+        "- Do not huddle. No outbox. Facts go in SHARED.md. Wait for the boss.\n"
+        "- Stay in your role. Other work: wait. Do not message the boss."
     )
 
 
@@ -306,7 +306,7 @@ def ensure_team_roles(roster: dict | None = None) -> None:
         shared = ROOT / "shared-memory.md"
         if shared.is_file():
             cur = shared.read_text(encoding="utf-8")
-            lines = ["## Team", "One boss assigns. Specialists stay in role. Huddle `to: all` is boss-only."]
+            lines = ["## Team", "One boss assigns. Specialists stay in role. Bots do not huddle each other."]
             for slug, meta in (roster.get("agents") or {}).items():
                 if slug.startswith("h--") or (meta or {}).get("helper"):
                     continue
@@ -1369,6 +1369,24 @@ def save_queue(slug: str, items: list) -> None:
     agent_dir(slug).joinpath("queue.json").write_text(
         json.dumps(items[-40:], ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def drop_huddle_queue(slug: str) -> int:
+    """Drop queued huddles so a STOP does not play after a stale instruction."""
+    items = load_queue(slug)
+    keep = []
+    dropped = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "")
+        if re.match(r"^\[(?:Huddle from|Overleg van)\s", text, re.I):
+            dropped += 1
+            continue
+        keep.append(item)
+    if dropped:
+        save_queue(slug, keep)
+    return dropped
 
 
 def enqueue(

@@ -49,14 +49,16 @@ DEFAULT_SETTINGS = {
     "push": False,
     "awake": True,
     "drive": False,
+    "loops_night": False,
     "theme": "light",
 }
-BROWSE = "http://127.0.0.1:8791"
+BROWSE_PORT = 8791
+BROWSE = f"http://127.0.0.1:{BROWSE_PORT}"
 TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.64"
+VERSION = "1.8.73"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
 STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
@@ -152,8 +154,21 @@ def lan_ip() -> str:
     return "127.0.0.1"
 
 
+def swarm_alive_on(port: int) -> bool:
+    """True when this port already serves a Swarm /api/state."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=0.4) as r:
+            data = json.loads(r.read().decode() or "{}")
+        return bool(isinstance(data, dict) and data.get("ok"))
+    except Exception:
+        return False
+
+
 def pick_port(preferred: int) -> int:
+    reserved = {BROWSE_PORT}
     for port in range(preferred, preferred + 40):
+        if port in reserved:
+            continue
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
@@ -1936,7 +1951,23 @@ def crew_for_slug(slug: str, meta: dict | None = None) -> list[dict]:
 _last_keep = 0.0
 _last_typed: dict[str, tuple[str, float]] = {}
 _last_loops = 0.0
+_last_loop_fire = 0.0
 _wiped_extras = False
+LOOP_STAGGER_SEC = 90.0
+LOOP_BRIEF = "\n\nKort. Geen huddle, geen extra agent. Niks te doen? Antwoord alleen: Klaar."
+_HUDDLE_PREFIX_RE = re.compile(
+    r"^\[(?:Huddle from|Overleg van)\s+[^\]]*\]:\s*",
+    re.I,
+)
+_HUDDLE_NOISE_RE = re.compile(
+    r"^(?:klaar\.?|ok\.?|okay\.?|done\.?|niets|niks te doen|no issue\.?)\s*$",
+    re.I,
+)
+_HUDDLE_ACK_RE = re.compile(
+    r"^(?:ack\s+(?:stop|fout)\b|stop begrepen\b|fout erkend\b|herhaalde ack\b)",
+    re.I,
+)
+_HUDDLE_OVERRIDE_RE = re.compile(r"^(?:stop|fout)\b", re.I)
 
 
 def _owned_helper_tmux() -> set[str]:
@@ -2217,8 +2248,48 @@ def revive_helpers() -> None:
             ).start()
 
 
+def loop_quiet_hours(now: float | None = None) -> bool:
+    """23:00–07:00 Europe/Amsterdam — loops sleep unless settings.loops_night."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("Europe/Amsterdam")
+    except Exception:
+        tz = timezone.utc
+    hour = datetime.fromtimestamp(now if now is not None else time.time(), tz=tz).hour
+    return hour >= 23 or hour < 7
+
+
+def huddle_body(text: str) -> str:
+    return _HUDDLE_PREFIX_RE.sub("", (text or "").strip(), count=1).strip()
+
+
+def is_huddle(text: str) -> bool:
+    return bool(_HUDDLE_PREFIX_RE.match((text or "").strip()))
+
+
+def huddle_is_noise(text: str) -> bool:
+    raw = huddle_body(text)
+    return bool(_HUDDLE_NOISE_RE.match(raw) or _HUDDLE_ACK_RE.match(raw))
+
+
+def huddle_is_override(text: str) -> bool:
+    """Boss STOP/FOUT replaces queued huddles instead of lining up behind them."""
+    raw = huddle_body(text)
+    if huddle_is_noise(text):
+        return False
+    return bool(_HUDDLE_OVERRIDE_RE.match(raw))
+
+
+def loop_prompt(name: str, prompt: str) -> str:
+    body = (prompt or "").rstrip()
+    if "geen huddle" not in body.lower():
+        body = body + LOOP_BRIEF
+    return f"[Loop · {name or 'Loop'}]: {body}"
+
+
 def tick_loops() -> None:
-    global _last_loops
+    global _last_loops, _last_loop_fire
     now = time.time()
     if now - _last_loops < 20:
         return
@@ -2235,6 +2306,10 @@ def tick_loops() -> None:
             )
         except Exception:
             pass
+    if not load_settings().get("loops_night") and loop_quiet_hours(now):
+        return
+    if now - _last_loop_fire < LOOP_STAGGER_SEC:
+        return
     for slug, loop in rosterlib.due_swarm_loops():
         try:
             win = resolve_delivery({"slug": slug})
@@ -2243,10 +2318,20 @@ def tick_loops() -> None:
             # Still working: leave due, try again next tick. Do not mark fired.
             if live_busy(win):
                 continue
+            tmux = str(win.get("tmux") or "")
+            if tmux:
+                try:
+                    pane = agents_tmux.capture_pane(tmux, 16)
+                except Exception:
+                    pane = ""
+                if re.search(r"│\s*❯\s+\S", pane or ""):
+                    continue
             name = loop.get("name") or "Loop"
             prompt = loop.get("prompt") or ""
-            dispatch_text(win, f"[Loop · {name}]: {prompt}", True)
+            dispatch_text(win, loop_prompt(name, prompt), True)
             rosterlib.mark_loop_fired(slug, loop.get("id") or "")
+            _last_loop_fire = time.time()
+            break
         except Exception:
             pass
 
@@ -2990,6 +3075,88 @@ def _is_tui_chrome(s: str) -> bool:
     if re.fullmatch(r"[:\d\s\[\]↓↑topkKmM·.\-]+", t):
         return True
     return False
+
+
+_TERM_STATUS = re.compile(
+    r"(?i)^(Thinking|Waiting for response|Compacting|Writing|Reading|Searching|"
+    r"Preparing|Running|Working|Worked for)\b"
+)
+_TERM_TOOL = re.compile(r"^[◆◈●❙]\s*")
+_TERM_THINK = re.compile(r"^[┃│]\s+")
+_TERM_USER = re.compile(r"^[❯>|]\s*")
+_TERM_SKIP = re.compile(
+    r"(?i)always[- ]?approve|enter:(queue|send)|shift\+tab|esc:cancel|ctrl\+[a-z;]|"
+    r"grok\s+\d|auto-approve|type a message|queued\s*$|"
+    r"\[\s*(stop|↓|↑|\+|top)\s*\]|"
+    r"\b\d+[kKmM]\s*/\s*\d+[kKmM]\b|"
+    r"^~\S+\s+\d+[kKmM]"
+)
+
+
+def style_pane(raw: str) -> list[dict]:
+    """Turn a Grok TUI pane into CSS-ready blocks: user / assistant / think / tool / status."""
+    blocks: list[dict] = []
+    kind = ""
+    buf: list[str] = []
+
+    def push() -> None:
+        nonlocal kind, buf
+        text = "\n".join(x for x in buf if x is not None).strip()
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        if kind and text:
+            blocks.append({"kind": kind, "text": text[:4000]})
+        kind, buf = "", []
+
+    def add(k: str, line: str) -> None:
+        nonlocal kind, buf
+        if kind != k:
+            push()
+            kind = k
+        buf.append(line)
+
+    for ln in (raw or "").splitlines():
+        s = _strip_ansi(ln).replace("\u00a0", " ")
+        if not s.strip():
+            if kind == "user":
+                push()
+            continue
+        if _TERM_SKIP.search(s) or _is_tui_chrome(s):
+            if re.search(r"(?i)waiting for response|thinking…|compacting|worked for", s):
+                pass
+            else:
+                continue
+        bare = _BOX_RE.sub("", s).strip(" |")
+        bare = re.sub(r"\s+\d{1,2}:\d{2}\s*(?:AM|PM)?\s*$", "", bare, flags=re.I).strip()
+        if not bare or bare in {"▲", "▼", "█", "❯", ">", "|"}:
+            if kind == "user":
+                push()
+            continue
+        if re.fullmatch(r"[╭╰╮╯┌┐└┘─═│┃]+", s.strip()):
+            continue
+        spin = re.sub(r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●○]\s*", "", bare)
+        if _TERM_STATUS.match(spin) or re.search(
+            r"(?i)waiting for response|thinking…|compacting…|worked for\s+\d", spin
+        ):
+            spin = re.sub(r"\s+\d+[smh]\b.*$", "", spin)
+            spin = re.sub(r"\s+\d+:\d+\b.*$", "", spin)
+            add("status", spin.strip())
+            continue
+        if _TERM_THINK.match(s) or _TERM_THINK.match(bare) or spin.startswith("◆ Thinking"):
+            add("think", re.sub(r"^[┃│◆]\s*", "", bare).strip())
+            continue
+        if _TERM_TOOL.match(bare) or _TERM_TOOL.match(s):
+            add("tool", _TERM_TOOL.sub("", bare).strip())
+            continue
+        if _TERM_USER.match(s) or _TERM_USER.match(bare) or s.lstrip().startswith("❯"):
+            add("user", _TERM_USER.sub("", bare).strip())
+            continue
+        if kind == "user":
+            add("user", bare)
+            continue
+        add("assistant", bare)
+
+    push()
+    return blocks[-48:]
 
 
 def clip_pane(raw: str, keep: int = 8) -> str:
@@ -3868,6 +4035,13 @@ def collect_chat(win: dict) -> dict:
         more = rosterlib.load_swarm_msgs(slug) or swarm_all
         msgs = merge_progress_notes(msgs, more)
         msgs = merge_file_cards(msgs, more)
+    term: list[dict] = []
+    tmux_live = str(packed.get("tmux") or "")
+    if tmux_live:
+        try:
+            term = style_pane(agents_tmux.capture_pane(tmux_live, 90))
+        except Exception:
+            term = []
     out = {
         "messages": msgs,
         "session": main_sid,
@@ -3879,6 +4053,7 @@ def collect_chat(win: dict) -> dict:
         "loops": rosterlib.public_loops(slug) if slug else [],
         "progress": prog,
         "login": login_state(win, meta, str(packed.get("tmux") or "")),
+        "term": term,
     }
     crew = out["crew"] or []
     if stopped or (answered and not pane_live and not last_submit_hold(meta)):
@@ -3910,13 +4085,15 @@ def login_state(win: dict, meta: dict, tmux: str) -> dict:
         signed = agents_tmux.logged_in(ai)
     except Exception:
         signed = False
+    if signed and not flagged:
+        return {"needed": False, "ai": ai}
     if flagged and signed:
         try:
             finish_cli_login(win, meta)
         except Exception as exc:
             print("finish login", exc, flush=True)
         return {"needed": False, "ai": ai}
-    needed = flagged or bool(info.get("url") or info.get("code"))
+    needed = flagged or bool(info.get("needed") and (info.get("url") or info.get("code")))
     if not needed:
         return {"needed": False, "ai": ai}
     return {
@@ -4310,6 +4487,15 @@ def dispatch_text(win: dict, text: str, submit: bool, hinted_busy: bool = False)
         _last_typed[slug] = (body, time.time())
     rost_now = rosterlib.load_roster()
     ceo = rost_now.get("ceo") or ""
+    if submit and is_huddle(body) and huddle_is_noise(body):
+        return {"ok": True, "via": "huddle-skip", "helper": False, "queued": False, "silent": True}
+    if submit and is_huddle(body) and huddle_is_override(body) and slug:
+        try:
+            rosterlib.drop_huddle_queue(slug)
+        except Exception:
+            pass
+    if submit and is_huddle(body) and slug and live_busy(win):
+        return apply_second_choice(win, slug, body, "queue", chosen_by="swarm")
     if (
         submit
         and body
@@ -5484,8 +5670,8 @@ def _focus_slug_window(slug: str) -> bool:
 def steer_into_chat(win: dict, slug: str, text: str, interrupt_first: bool = True) -> dict:
     """Put a 2nd message into this bot's Grok terminal and actually send it.
 
-    Pasting during a live turn is dropped. Stop first when the user chose
-    This chat; otherwise wait until the current turn finishes.
+    Grok treats a second Enter as send-now: the new user pill lands in the
+    same TUI. Interrupt first only when the user picked This chat.
     """
     text = (text or "").strip()
     if not text:
@@ -5506,25 +5692,7 @@ def steer_into_chat(win: dict, slug: str, text: str, interrupt_first: bool = Tru
             interrupt_chat(win)
         except Exception as exc:
             print("steer interrupt", exc, flush=True)
-    if not busy:
-        deliver_text(win, text, True)
-        _mark_submit(slug)
-        return {"ok": True, "via": "steer", "text": text}
-    tmux = str(win.get("tmux") or "")
-    if not tmux:
-        try:
-            rost = rosterlib.load_roster()
-            meta = (rost.get("agents") or {}).get(slug) or {}
-            tmux = ensure_hidden_tmux(slug, meta, win)
-            win["tmux"] = tmux
-        except Exception as exc:
-            print("steer tmux", exc, flush=True)
-            deliver_text(win, text, True)
-            _mark_submit(slug)
-            return {"ok": True, "via": "steer", "text": text}
-    threading.Thread(
-        target=_send_when_ready, args=(tmux, text, 80.0), daemon=True
-    ).start()
+    deliver_text(win, text, True)
     _mark_submit(slug)
     return {"ok": True, "via": "steer", "text": text}
 
@@ -6369,6 +6537,7 @@ def make_handler(app: App):
                         "crew": chat.get("crew") or [],
                         "loops": chat.get("loops") or [],
                         "progress": prog,
+                        "term": chat.get("term") or [],
                         "busy": busy,
                         "activity": (prog.get("activity") if busy else None) or (main or {}).get("activity") or win.get("activity") or ("Busy" if busy else "Ready"),
                         "busy_since": (main or {}).get("busy_since"),
@@ -7160,6 +7329,19 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8790)
     parser.add_argument("--local-only", action="store_true")
     args = parser.parse_args()
+
+    if swarm_alive_on(args.port):
+        token = load_or_create_token()
+        ip = lan_ip()
+        lan = f"http://{ip}:{args.port}/?k={token}"
+        pub = public_base()
+        primary = f"{pub}/?k={token}" if pub else lan
+        print(f"→ Swarm already running on :{args.port}")
+        print(f"  Phone (same Wi-Fi):  {lan}")
+        if pub:
+            print(f"  Public / 5G:         {primary}")
+        write_urls(primary, lan)
+        sys.exit(0)
 
     port = pick_port(args.port)
     token = load_or_create_token()

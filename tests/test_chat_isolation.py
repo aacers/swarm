@@ -41,6 +41,8 @@ class IsolationUnit(unittest.TestCase):
         server._stopped_until.clear()
         server._busy_since.clear()
         server._busy_idle_since.clear()
+        server._last_loops = 0
+        server._last_loop_fire = 0
 
     def test_persist_refuses_taken_session(self):
         rosterlib.save_roster(
@@ -416,6 +418,17 @@ class IsolationUnit(unittest.TestCase):
         server.release_session_locks(sid)
         self.assertFalse(loc.exists())
 
+    def test_worker_role_does_not_ask_for_acks(self):
+        rost = _roster(
+            {"bot-c": {"label": "CEO", "role": "ceo"}, "bot-a": {"label": "Apps bot"}},
+            ceo="bot-c",
+        )
+        worker = rosterlib.role_card("bot-a", rost["agents"]["bot-a"], rost)
+        self.assertNotIn("report back", worker.lower())
+        self.assertIn("Do not ack", worker)
+        boss = rosterlib.role_card("bot-c", rost["agents"]["bot-c"], rost)
+        self.assertIn("ack-pingpong", boss)
+
     def test_worker_cannot_broadcast_overleg(self):
         import overleg_watch as ow
 
@@ -432,13 +445,13 @@ class IsolationUnit(unittest.TestCase):
         rost = rosterlib.load_roster()
         targets, err = ow.plan_targets({"to": "all", "from": "Degero", "text": "hoi"}, rost)
         self.assertEqual(targets, [])
-        self.assertIn("boss", err)
-        ok, err2 = ow.plan_targets({"to": "all", "from": "CEO", "text": "doe dit"}, rost)
-        slugs = [s for s, _ in ok]
-        self.assertEqual(err2, "")
-        self.assertIn("bot-d", slugs)
-        self.assertIn("bot-x", slugs)
-        self.assertNotIn("bot-c", slugs)
+        self.assertTrue(err)
+        worker, werr = ow.plan_targets({"to": "X", "from": "Degero", "text": "ack"}, rost)
+        self.assertEqual(worker, [])
+        self.assertIn("boss", werr)
+        all_ceo, aerr = ow.plan_targets({"to": "all", "from": "CEO", "text": "doe dit"}, rost)
+        self.assertEqual(all_ceo, [])
+        self.assertIn("everyone", aerr)
 
     def test_overleg_matches_roster_label(self):
         import overleg_watch as ow
@@ -450,6 +463,9 @@ class IsolationUnit(unittest.TestCase):
         hit, err = ow.plan_targets({"to": "Degero", "from": "CEO", "text": "gacs"}, rost)
         self.assertEqual(err, "")
         self.assertEqual(hit[0][0], "bot-d")
+        worker, werr = ow.plan_targets({"to": "CEO", "from": "Degero", "text": "klaar"}, rost)
+        self.assertEqual(worker, [])
+        self.assertIn("boss", werr)
 
     def test_pick_routes_sends_degero_and_keeps_ok(self):
         rost = _roster(
@@ -661,6 +677,97 @@ class IsolationUnit(unittest.TestCase):
         dispatch.assert_not_called()
         again = rosterlib.load_loops("bot-a")
         self.assertAlmostEqual(float(again[0]["next"]), nxt, places=1)
+
+    def test_loop_quiet_hours_amsterdam(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("Europe/Amsterdam")
+        night = datetime(2026, 8, 19, 23, 30, tzinfo=tz).timestamp()
+        morning = datetime(2026, 8, 20, 6, 59, tzinfo=tz).timestamp()
+        day = datetime(2026, 8, 20, 10, 0, tzinfo=tz).timestamp()
+        self.assertTrue(server.loop_quiet_hours(night))
+        self.assertTrue(server.loop_quiet_hours(morning))
+        self.assertFalse(server.loop_quiet_hours(day))
+
+    def test_tick_loops_sleeps_at_night(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        rosterlib.upsert_loop("bot-a", "Check", "5m", "korte ronde")
+        loops = rosterlib.load_loops("bot-a")
+        loops[0]["next"] = time.time() - 10
+        rosterlib.save_loops("bot-a", loops)
+        nxt = loops[0]["next"]
+        with mock.patch.object(server, "loop_quiet_hours", return_value=True):
+            with mock.patch.object(server, "load_settings", return_value={"loops_night": False}):
+                with mock.patch.object(server, "dispatch_text") as dispatch:
+                    server.tick_loops()
+        dispatch.assert_not_called()
+        self.assertAlmostEqual(float(rosterlib.load_loops("bot-a")[0]["next"]), nxt, places=1)
+
+    def test_loop_prompt_asks_for_short_no_huddle(self):
+        text = server.loop_prompt("ASO", "check keywords")
+        self.assertIn("[Loop · ASO]", text)
+        self.assertIn("Geen huddle", text)
+        self.assertIn("Klaar", text)
+
+    def test_huddle_noise_is_skipped(self):
+        self.assertTrue(server.huddle_is_noise("[Huddle from CEO]: Klaar"))
+        self.assertTrue(server.huddle_is_noise("[Huddle from X]: niks te doen"))
+        self.assertTrue(server.huddle_is_noise("[Overleg van Apps bot]: Ack STOP. origin weg."))
+        self.assertTrue(server.huddle_is_noise("[Huddle from Naptara]: STOP begrepen. Geen push."))
+        self.assertTrue(server.huddle_is_noise("[Huddle from Android APPS]: Ack FOUT. Remotes leeg."))
+        self.assertFalse(server.huddle_is_noise("[Huddle from Apps]: listing is live"))
+        win = {"slug": "bot-a", "tmux": "heavy-bot-a"}
+        out = server.dispatch_text(win, "[Huddle from CEO]: Klaar", True)
+        self.assertEqual(out.get("via"), "huddle-skip")
+        out2 = server.dispatch_text(win, "[Overleg van Apps bot]: Ack STOP. origin weg.", True)
+        self.assertEqual(out2.get("via"), "huddle-skip")
+
+    def test_stop_huddle_drops_queued_huddles(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        rosterlib.enqueue("bot-a", "[Huddle from CEO]: push naar github")
+        rosterlib.enqueue("bot-a", "real user note")
+        self.assertEqual(rosterlib.drop_huddle_queue("bot-a"), 1)
+        left = rosterlib.load_queue("bot-a")
+        self.assertEqual(len(left), 1)
+        self.assertEqual(left[0]["text"], "real user note")
+        win = {"slug": "bot-a", "tmux": "heavy-bot-a"}
+        rosterlib.enqueue("bot-a", "[Huddle from CEO]: push naar github")
+        with mock.patch.object(server, "live_busy", return_value=True):
+            with mock.patch.object(server, "apply_second_choice", return_value={"ok": True, "choice": "queue"}) as apply:
+                server.dispatch_text(win, "[Huddle from CEO]: STOP. Geen push.", True)
+        apply.assert_called_once()
+        texts = [i.get("text") for i in rosterlib.load_queue("bot-a")]
+        self.assertNotIn("[Huddle from CEO]: push naar github", texts)
+
+    def test_busy_huddle_queues_not_helper(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        win = {"slug": "bot-a", "tmux": "heavy-bot-a"}
+        with mock.patch.object(server, "live_busy", return_value=True):
+            with mock.patch.object(server, "apply_second_choice", return_value={"ok": True, "choice": "queue"}) as apply:
+                out = server.dispatch_text(win, "[Huddle from X]: Swarm staat still", True)
+        apply.assert_called_once()
+        self.assertEqual(apply.call_args.args[3], "queue")
+        self.assertEqual(out.get("choice"), "queue")
+
+    def test_tick_loops_fires_one_when_idle(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        rosterlib.upsert_loop("bot-a", "ASO", "4h", "check keywords")
+        loops = rosterlib.load_loops("bot-a")
+        loops[0]["next"] = time.time() - 10
+        rosterlib.save_loops("bot-a", loops)
+        with mock.patch.object(server, "loop_quiet_hours", return_value=False):
+            with mock.patch.object(server, "resolve_delivery", return_value={"slug": "bot-a", "tmux": "heavy-bot-a"}):
+                with mock.patch.object(server, "live_busy", return_value=False):
+                    with mock.patch.object(server.agents_tmux, "capture_pane", return_value="│ ❯ \n"):
+                        with mock.patch.object(server, "dispatch_text") as dispatch:
+                            server.tick_loops()
+        dispatch.assert_called_once()
+        sent = dispatch.call_args.args[1]
+        self.assertIn("[Loop · ASO]", sent)
+        self.assertIn("Geen huddle", sent)
+        again = rosterlib.load_loops("bot-a")
+        self.assertGreater(float(again[0]["next"]), time.time())
 
     def test_role_upsert_keeps_facts(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "Degero", "role": "worker"}}))
@@ -1190,6 +1297,31 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertNotIn("always-approve", out)
         self.assertNotIn("leftover typed", out)
         self.assertNotIn("Enter:queue", out)
+
+    def test_style_pane_turns_tui_into_css_blocks(self):
+        raw = """
+  ~/.grok/imac-phone/workspaces/bot-43016                          252K / 500K
+     ❯ moeten we huddle misschien verwijderen?
+       eigenlijk toe
+
+     Niet helemaal weggooien. Wel bot↔bot dichtzetten.
+     Worked for 1m31s
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │ ❯                                                                        │
+  ╰─────────────────────────────────────── Grok 4.6 (high) · always-approve ─╯
+  Shift+Tab:mode  │ Ctrl+x:shortcuts
+    ⠼ Waiting for response… 1.1s                             1.1s ⇣197k [stop]
+"""
+        blocks = server.style_pane(raw)
+        kinds = [b["kind"] for b in blocks]
+        texts = " ".join(b["text"] for b in blocks)
+        self.assertIn("user", kinds)
+        self.assertIn("assistant", kinds)
+        self.assertIn("huddle", texts.lower())
+        self.assertIn("dichtzetten", texts)
+        self.assertNotIn("Shift+Tab", texts)
+        self.assertNotIn("always-approve", texts)
+        self.assertTrue(any(b["kind"] == "status" for b in blocks))
 
     def test_clip_pane_keeps_streaming_reply(self):
         raw = """
@@ -1799,6 +1931,8 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
 
     def test_keep_screen_on_setting_exists(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('data-k="loops_night"', html)
+        self.assertFalse(server.DEFAULT_SETTINGS.get("loops_night"))
         self.assertIn('data-k="awake"', html)
         self.assertIn("function holdAwake(", html)
         self.assertIn('wakeLock.request("screen")', html)
@@ -1861,6 +1995,10 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertEqual(info["code"], "AB12-CD34")
         idle = "❯ \nGrok 4.6 · always-approve"
         self.assertFalse(server.agents_tmux.parse_login_pane(idle)["needed"])
+        play = "Open https://play.google.com/console and sign in\nPlay Console login"
+        self.assertFalse(server.agents_tmux.parse_login_pane(play)["needed"])
+        anyhttps = "Read https://example.com/docs\nWorked for 2s"
+        self.assertFalse(server.agents_tmux.parse_login_pane(anyhttps)["needed"])
 
     def test_login_ui_has_sign_in_controls(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
@@ -2177,6 +2315,19 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("return 320", html)
 
+    def test_browse_authcopy_and_swarm_slug(self):
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn("def seed_profile(", daemon)
+        self.assertIn("def _inherit_shared_auth(", daemon)
+        self.assertIn("def _clean_cookies(", daemon)
+        self.assertIn('if path == "authcopy":', daemon)
+        self.assertIn('elif cmd == "state":', daemon)
+        tmux = (ROOT / "agents_tmux.py").read_text(encoding="utf-8")
+        self.assertIn("def stamp_slug(", tmux)
+        self.assertIn('SWARM_SLUG', tmux)
+        gbrowse = Path.home() / ".grok" / "bin" / "gbrowse"
+        self.assertIn('print("bot", bot)', gbrowse.read_text(encoding="utf-8"))
+
     def test_all_chat_windows_pin_messages_above_composer(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("#chatpad,#nowturn,#nowlog{display:none !important}", html)
@@ -2407,6 +2558,11 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("function chatKey(w)", html)
         self.assertIn("function sameChat(w, want)", html)
+        self.assertIn("function termBodyHtml(term)", html)
+        self.assertIn("#termview", html)
+        self.assertIn("#turnsticky", html)
+        self.assertIn("#turnsticky.on{display:flex}", html)
+        self.assertIn("function paintSticky(q)", html)
         self.assertIn("&slug=", html)
         self.assertIn("chatKey(current)", html)
 

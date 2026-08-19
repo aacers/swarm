@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import roster as rosterlib
-from server import STATE_DIR, dispatch_text
+from server import STATE_DIR, dispatch_text, huddle_is_noise
 
 BUS = STATE_DIR / "bus"
 OUTBOX = BUS / "outbox.jsonl"
@@ -71,11 +71,12 @@ def plan_targets(msg: dict, rost: dict) -> tuple[list[tuple[str, dict]], str]:
             return True
         return rosterlib.is_forgotten(slug=slug, tmux=str((meta or {}).get("tmux") or ""))
 
+    # Bots do not chat with each other. Only the boss may huddle, and only
+    # to one owner. "all" is Tim in the Swarm UI, never a bot outbox.
     if to.lower() == "all":
-        if not ceo:
-            return [], "only the boss may message everyone"
-        out = [(s, m) for s, m in agents.items() if not skip(s, m)]
-        return out, ""
+        return [], "only you in Swarm may message everyone"
+    if not ceo:
+        return [], "only the boss may huddle"
 
     hit = rosterlib.find_agent_by_name(to, rost)
     if not hit:
@@ -97,6 +98,9 @@ def deliver(msg: dict) -> None:
         print("overleg skip", src, "->", msg.get("to"), err or "no target", flush=True)
         return
     payload = f"[Huddle from {src}]: {text}"
+    if huddle_is_noise(payload):
+        print("overleg skip", src, "->", msg.get("to"), "ack-noise", flush=True)
+        return
     for slug, meta in targets:
         try:
             dispatch_text(win_for(slug, meta), payload, True)
