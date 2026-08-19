@@ -596,6 +596,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
       <button type="button" data-ai="claude">Claude</button>
       <button type="button" data-ai="codex">ChatGPT<span class="sub">Codex</span></button>
     </div>
+    <input id="asetai-other" placeholder="or any CLI name (gemini, aider…)" autocomplete="off" spellcheck="false" style="margin-top:8px;display:none"/>
   </div>
   <div class="field"><label>Model</label><div id="asetmodel" class="ai-picks"></div></div>
   <div class="field"><label>Shape</label><div id="aseticons" class="igrid"></div></div>
@@ -662,9 +663,10 @@ const H={"Content-Type":"application/json"};
 if(KEY) H["X-Remote-Key"]=KEY;
 let windows=[], roster={ceo:"",agents:[]}, current=null, sending=false, chatTimer=null, bTimer=null, sheetReady=0, settings={};
 let providers={grok:true,claude:true,codex:true};
+const AI_EXTRA=["gemini","aider","opencode","cursor-agent","amp","crush"];
 let modelsCatalog={grok:[["grok-4.6","4.6"],["grok-4.5","4.5"]],claude:[["sonnet","Sonnet"],["opus","Opus"],["haiku","Haiku"]],codex:[["","Default"],["gpt-5.4","GPT-5.4"]]};
 let chatToken=0;
-let watchMutedAt=0, lastBrowseAt=0, lastShotN=0, shotBusy=false, activeTab="chat", browseFromChat=null;
+let watchMutedAt=0, lastBrowseAt=0, lastShotN=0, shotBusy=false, activeTab="chat", browseFromChat=null, lastZoomUrl="";
 const pending={};
 const lastSubmit={};
 const $=id=>document.getElementById(id);
@@ -1282,8 +1284,8 @@ function tab(name, stayHome){
     shell.classList.add("page"); shell.classList.remove("chat");
   }
   clearInterval(bTimer); bTimer=null;
-  if(name==="browser"){ startBrowse(); if($("watch")) $("watch").classList.remove("on","big"); }
-  else { armBrowsePoll(); if(name==="chat") pollBrowse(); }
+  if(name==="browser"){ startBrowse(); if($("watch")) $("watch").classList.remove("on","big"); stickBrowseComposer(); }
+  else { armBrowsePoll(); if(name==="chat") pollBrowse(); stickBrowseComposer(); }
   if(name==="mem") loadMem();
   if(name==="set") loadSet();
 }
@@ -2279,17 +2281,28 @@ window.addEventListener("pointerup",e=>{
 });
 window.addEventListener("pointercancel",()=>{ rowPress=null; });
 $("backm").onclick=()=>{ goHome(); clearTimeout(chatTimer); };
-$("fab").onclick=async()=>{
-  if($("fab").disabled) return;
-  $("fab").disabled=true;
-  try{
-    const d=await api("/api/open",{method:"POST",body:JSON.stringify({app:"Terminal"})});
-    toast("New bot");
-    await refresh();
-    if(d.id) selectAgent(d.id);
-  }catch(e){ toast(e.message); }
-  finally{ $("fab").disabled=false; }
+$("fab").onclick=()=>{
+  openNewBot();
 };
+async function spawnBot(ai){
+  ai=String(ai||"grok").toLowerCase().replace(/[^a-z0-9_-]/g,"");
+  if(!ai){ toast("type a CLI name"); return; }
+  const d=await api("/api/open",{method:"POST",body:JSON.stringify({app:"Terminal",ai})});
+  toast("New bot · "+aiLabel(ai));
+  await refresh();
+  if(d.id) selectAgent(d.id);
+}
+function openNewBot(){
+  const keys=installedAis().filter(k=>providers[k]!==false);
+  const rows=keys.map(k=>{
+    const lab=k==="codex"?"ChatGPT":aiLabel(k);
+    return `<button class="app-row" data-newai="${k}">${esc(lab)}</button>`;
+  }).join("");
+  $("sheettitle").textContent="New bot";
+  $("sheetbody").innerHTML=rows+`<div class="field" style="margin-top:10px"><input id="newai-other" placeholder="other CLI (gemini, aider…)" autocomplete="off"/><button class="app-row" data-newai="other" style="margin-top:8px">Start that CLI</button></div>`;
+  sheetReady=Date.now()+200;
+  $("sheet").classList.add("on");
+}
 if($("steerbar")){
   const bar=$("steerbar");
   bar.addEventListener("pointerdown", ev=>{
@@ -2739,17 +2752,26 @@ if($("loopbtn")) $("loopbtn").onclick=ev=>{
 if($("schema")) $("schema").onclick=ev=>{
   if(ev.target.closest("[data-loop]") && $("botset")) $("botset").click();
 };
+function installedAis(){
+  const core=["grok","claude","codex"];
+  const extra=AI_EXTRA.concat(Object.keys(providers||{})).filter((k,i,a)=>!core.includes(k)&&a.indexOf(k)===i);
+  return core.concat(extra.sort());
+}
 function paintAiPicks(on){
   const el=$("asetai"); if(!el) return;
-  const core=["grok","claude","codex"];
-  const extra=Object.keys(providers||{}).filter(k=>!core.includes(k)).sort();
-  const keys=core.concat(extra);
+  const keys=installedAis();
+  const known=keys.includes(on);
   el.innerHTML=keys.map(k=>{
     const off=providers[k]===false;
     const lab=k==="codex"?"ChatGPT":aiLabel(k);
     const sub=k==="grok"?"default":k==="codex"?"Codex":"";
     return `<button type="button" data-ai="${k}"${off?" disabled":""} class="${k===on?"on":""}">${esc(lab)}${sub?`<span class="sub">${esc(sub)}</span>`:""}</button>`;
-  }).join("");
+  }).join("")+`<button type="button" data-ai="other" class="${known?"":"on"}">Other</button>`;
+  const oth=$("asetai-other");
+  if(oth){
+    oth.style.display=(!known||on==="other")?"block":"none";
+    if(!known && on) oth.value=on;
+  }
 }
 $("botset").onclick=async()=>{
   if(!current){toast("pick a bot first");return}
@@ -2857,7 +2879,9 @@ function paintModelPicks(ai, selected){
 $("asetai").onclick=e=>{
   const b=e.target.closest("[data-ai]"); if(!b||b.disabled) return;
   $("asetai").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
-  paintModelPicks(b.dataset.ai, "");
+  const oth=$("asetai-other");
+  if(oth) oth.style.display=b.dataset.ai==="other"?"block":"none";
+  paintModelPicks(b.dataset.ai==="other"?"grok":b.dataset.ai, "");
 };
 if($("asetmodel")) $("asetmodel").onclick=e=>{
   const b=e.target.closest("[data-model]"); if(!b) return;
@@ -2937,7 +2961,9 @@ $("asetsave").onclick=async()=>{
   const name=$("asetname").value.trim();
   const icon=($("aseticons").querySelector("button.on")||{}).dataset?.icon||"";
   const color=($("asetcolors").querySelector("button.on")||{}).dataset?.color||"";
-  const ai=($("asetai").querySelector("button.on")||{}).dataset?.ai||"grok";
+  let ai=($("asetai").querySelector("button.on")||{}).dataset?.ai||"grok";
+  if(ai==="other") ai=(($("asetai-other")||{}).value||"").trim().toLowerCase().replace(/[^a-z0-9_-]/g,"");
+  if(!ai){toast("type a CLI name");return}
   const model=(($("asetmodel")||{}).querySelector && $("asetmodel").querySelector("button.on")||{}).dataset?.model||"";
   const draft=loopDraft();
   if(draft.prompt && (!draft.n||draft.n<1)){toast("pick an interval");return}
@@ -2966,6 +2992,14 @@ $("asetsave").onclick=async()=>{
 $("sheet").onclick=ev=>{
   if(ev.target.id==="sheet"){$("sheet").classList.remove("on");return}
   if(Date.now()<sheetReady) return;
+  const n=ev.target.closest("[data-newai]");
+  if(n){
+    let ai=n.dataset.newai;
+    if(ai==="other") ai=(($("newai-other")||{}).value||"").trim();
+    $("sheet").classList.remove("on");
+    spawnBot(ai).catch(e=>toast(e.message));
+    return;
+  }
   const t=ev.target.closest("[data-talk]"); if(!t) return;
   $("sheet").classList.remove("on"); sendOverleg(t.dataset.talk);
 };
@@ -3064,6 +3098,11 @@ function paintBrowse(d){
   const muted=watchMutedAt && at && at<=watchMutedAt;
   const inChat=!!(current && document.getElementById("shell").classList.contains("chat"));
   const hasPage=!!(url && url!=="about:blank" && !self);
+  if(url && url!==lastZoomUrl){
+    lastZoomUrl=url;
+    if($("bstage") && $("bstage")._zoom) $("bstage")._zoom.reset();
+    if($("watchstage") && $("watchstage")._zoom) $("watchstage")._zoom.reset();
+  }
   const showCard=inChat && hasPage && !muted && settings.browser!==false;
   if($("chatbr")) $("chatbr").classList.toggle("live", !!(hasPage && (d.busy || live)));
   const card=$("browsecard");
@@ -3282,6 +3321,18 @@ function bindBrowsePad(stage, img){
     mode=null;
   },{passive:false});
 }
+function stickBrowseComposer(){
+  const pane=$("p-browser");
+  if(!pane) return;
+  if(activeTab!=="browser" || !window.visualViewport){ pane.style.paddingBottom=""; return; }
+  const vv=window.visualViewport;
+  const overlap=Math.max(0, window.innerHeight-(vv.height+vv.offsetTop));
+  pane.style.paddingBottom=overlap>24?overlap+"px":"";
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener("resize", stickBrowseComposer);
+  window.visualViewport.addEventListener("scroll", stickBrowseComposer);
+}
 let browseArmed=false;
 function isBrowseCatch(el){ return el && (el.id==="btype"||el.id==="watchin"||el.id==="bkeys"); }
 function armBrowseType(){
@@ -3364,25 +3415,10 @@ if($("bcardx")) $("bcardx").onclick=ev=>{
 let watchTouch=null, watchSkipClick=false;
 $("watchx").onclick=e=>{ e.stopPropagation(); closeBrowseView(); };
 $("watchbig").onclick=e=>{ e.stopPropagation(); $("watch").classList.toggle("big"); };
-$("watchimg").onclick=ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } browseClick($("watchimg"), ev); };
-$("watchimg").oncontextmenu=ev=>{ev.preventDefault(); browseClick($("watchimg"), ev);};
+$("watchimg").onclick=ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } browseClick($("watchimg"), ev, $("watchstage")&&$("watchstage")._zoom); };
+$("watchimg").oncontextmenu=ev=>{ev.preventDefault(); browseClick($("watchimg"), ev, $("watchstage")&&$("watchstage")._zoom);};
 $("watchimg").addEventListener("wheel",ev=>{ev.preventDefault(); browseScroll($("watchimg"), ev);},{passive:false});
-$("watchimg").addEventListener("touchstart",ev=>{
-  const t=ev.touches[0]; if(!t) return;
-  watchTouch={x:t.clientX,y:t.clientY};
-  watchSkipClick=false;
-},{passive:true});
-$("watchimg").addEventListener("touchmove",ev=>{
-  if(!watchTouch) return;
-  const t=ev.touches[0]; if(!t) return;
-  const dy=t.clientY-watchTouch.y, dx=t.clientX-watchTouch.x;
-  if(Math.abs(dy)<12 && Math.abs(dx)<12) return;
-  ev.preventDefault();
-  watchSkipClick=true;
-  browseScroll($("watchimg"), {deltaY:-dy*1.6, deltaX:-dx*1.6, clientX:t.clientX, clientY:t.clientY});
-  watchTouch={x:t.clientX,y:t.clientY};
-},{passive:false});
-$("watchimg").addEventListener("touchend",()=>{ watchTouch=null; },{passive:true});
+if($("watchstage")) bindBrowsePad($("watchstage"), $("watchimg"));
 $("watchtype").onsubmit=async ev=>{
   ev.preventDefault();
   const t=$("watchin").value; $("watchin").value="";
@@ -3429,22 +3465,20 @@ $("bback").onclick=async()=>{
   }
   try{const d=await api("/api/browse/back",{method:"POST",body:browseBody({})}); if(d.url)$("burl").value=d.url}catch(e){toast(e.message)}
 };
-$("bstage").onclick=async ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } browseClick($("bframe"), ev); };
-$("bstage").addEventListener("wheel",ev=>{ev.preventDefault(); browseScroll($("bframe"), ev);},{passive:false});
-$("bstage").addEventListener("touchstart",ev=>{
-  const t=ev.touches[0]; if(!t) return;
-  watchTouch={x:t.clientX,y:t.clientY}; watchSkipClick=false;
-},{passive:true});
-$("bstage").addEventListener("touchmove",ev=>{
-  if(!watchTouch) return;
-  const t=ev.touches[0]; if(!t) return;
-  const dy=t.clientY-watchTouch.y, dx=t.clientX-watchTouch.x;
-  if(Math.abs(dy)<12 && Math.abs(dx)<12) return;
+$("bstage").onclick=async ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } if(ev.target.closest("#bzoombar")) return; browseClick($("bframe"), ev, $("bstage")&&$("bstage")._zoom); };
+$("bstage").addEventListener("wheel",ev=>{
+  if(ev.ctrlKey || ev.metaKey){
+    ev.preventDefault();
+    const pad=$("bstage")&&$("bstage")._zoom;
+    if(pad) pad.bump(ev.deltaY<0?1:-1, ev.clientX, ev.clientY);
+    return;
+  }
   ev.preventDefault();
-  watchSkipClick=true;
-  browseScroll($("bframe"), {deltaY:-dy*1.6, deltaX:-dx*1.6, clientX:t.clientX, clientY:t.clientY});
-  watchTouch={x:t.clientX,y:t.clientY};
+  browseScroll($("bframe"), ev);
 },{passive:false});
+if($("bstage")) bindBrowsePad($("bstage"), $("bframe"));
+if($("bzin")) $("bzin").onclick=ev=>{ ev.preventDefault(); ev.stopPropagation(); const pad=$("bstage")._zoom; if(pad) pad.bump(1); };
+if($("bzout")) $("bzout").onclick=ev=>{ ev.preventDefault(); ev.stopPropagation(); const pad=$("bstage")._zoom; if(pad) pad.bump(-1); };
 $("bcomposer").onsubmit=async ev=>{ev.preventDefault(); const t=$("btype").value; $("btype").value=""; try{await api("/api/browse/type",{method:"POST",body:browseBody({text:t,submit:true})}); $("btype").value="";}catch(e){toast(e.message)}};
 bindBrowseField($("btype"));
 bindBrowseField($("watchin"));

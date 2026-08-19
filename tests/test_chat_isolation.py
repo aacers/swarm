@@ -1850,6 +1850,14 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertTrue(icon.is_file())
         self.assertGreater(icon.stat().st_size, 2000)
 
+    def test_new_bot_picker_allows_other_cli(self):
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("function openNewBot(", html)
+        self.assertIn("data-newai", html)
+        self.assertIn("asetai-other", html)
+        self.assertIn("gemini", html)
+        self.assertIn("aider", html)
+
     def test_inbox_ui_always_has_three_change_buttons(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("function assignActs(", html)
