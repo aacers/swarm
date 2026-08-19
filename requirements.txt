@@ -1,2 +1,6 @@
-# Uses the desktop-harness venv (pyobjc already installed).
-# No extra pip packages required.
+pyobjc-framework-Quartz
+pyobjc-framework-Cocoa
+# optional: per-bot browser
+# playwright
+# optional: QR in the terminal
+# qrcode

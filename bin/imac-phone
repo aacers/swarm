@@ -7,8 +7,11 @@ while [[ -L "$SOURCE" ]]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
-PY="/Users/timgrootes/Projects/desktop-harness/.venv/bin/python3.11"
-if [[ ! -x "$PY" ]]; then
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  PY="$ROOT/.venv/bin/python"
+elif [[ -x "$HOME/Projects/desktop-harness/.venv/bin/python3.11" ]]; then
+  PY="$HOME/Projects/desktop-harness/.venv/bin/python3.11"
+else
   PY="$(command -v python3.11 || command -v python3)"
 fi
 exec "$PY" "$ROOT/server.py" "$@"
