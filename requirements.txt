@@ -1,6 +1,5 @@
 pyobjc-framework-Quartz
 pyobjc-framework-Cocoa
+qrcode
 # optional: per-bot browser
 # playwright
-# optional: QR in the terminal
-# qrcode

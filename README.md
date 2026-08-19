@@ -29,22 +29,19 @@ The models still do the work. Swarm is how you run several at once, without leav
 - At least one CLI signed in: `grok`, `claude`, and/or `codex`
 - Python 3.11+ with PyObjC (`Quartz` + `AppKit`)
 
-Clone is not enough. **[Getting started](docs/GETTING_STARTED.md)** is the real manual (venv, first bot, phone, browser, loops).
-
-## Run
+## Run (one script)
 
 ```bash
 git clone https://github.com/aacers/swarm.git
 cd swarm
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-./bin/imac-phone
+./install.sh
 ```
 
-Open the **Wi‑Fi** URL it prints on your iPhone. A key is written to `~/.grok/imac-phone/token`. Do not commit that file.
+That installs `tmux` + Python if needed, a venv, and starts Swarm. Open the **Wi‑Fi** URL on your iPhone → tap **+ Bot** → pick Grok, Claude, or ChatGPT → send.
 
-Tap **+ Bot**, pick Grok / Claude / ChatGPT, send a message.
+Per-bot Chrome: `./install.sh --browser`
+
+Stuck? **[Getting started](docs/GETTING_STARTED.md)**.
 
 ## Layout
 

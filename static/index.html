@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.59"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.61"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -183,6 +183,8 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 .chip{display:inline-flex;align-items:center;flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:750;line-height:1.25;color:var(--muted);max-width:18em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #mhead .grow,.mheadx .grow{flex:1;min-width:0;overflow:visible}
 .iconbtn{width:46px;height:46px;min-width:46px;border:0;border-radius:14px;background:var(--row);display:grid;place-items:center;font-size:22px}
+#chatbr.live{box-shadow:0 0 0 2px var(--busy)}
+#chatbr[hidden]{display:none !important}
 #p-chat{flex:1;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;position:relative}
 #dropmask{display:none;position:absolute;inset:8px;z-index:28;align-items:center;justify-content:center;pointer-events:none;background:rgba(107,100,216,.16);border:2px dashed var(--accent);border-radius:18px;font-weight:800;font-size:18px;color:var(--text);letter-spacing:-.02em}
 #p-chat.dropon #dropmask{display:flex}
@@ -447,7 +449,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   #mhead .mrow{gap:8px}
   .mheadx{gap:8px;padding:8px 10px;min-height:56px}
   #schema{margin-top:5px;padding:0}
-  #mhead #findbtn,#mhead #botset,.mheadx .iconbtn,#backm,.mback{width:40px;height:40px;min-width:40px}
+  #mhead #findbtn,#mhead #botset,#mhead #chatbr,.mheadx .iconbtn,#backm,.mback{width:40px;height:40px;min-width:40px}
   #mhead #talk{display:none}
   #mico-wrap.av{width:36px;height:36px;flex-basis:36px}
   #mico{width:36px;height:36px;border-radius:12px}
@@ -515,13 +517,14 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
         <div class="grow"><div class="trow"><div class="t" id="mtitle" title="Tap to rename">Choose a bot</div><input id="mrename" maxlength="40" autocomplete="off" spellcheck="false"/><button type="button" class="loopbtn" id="loopbtn" aria-expanded="false" title="Loops" hidden><span class="loopico">↻</span><span class="loopn" id="loopcount">0</span></button></div><div class="s" id="msub">Pick a bot on the left</div><div id="schema"></div></div>
         <span id="musage" title="Weekly usage"></span>
         <button class="iconbtn" id="findbtn" title="Search chat" aria-label="Search">⌕</button>
+        <button class="iconbtn" id="chatbr" title="Browser" aria-label="Browser" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/></svg></button>
         <button class="iconbtn" id="botset" title="Bot settings">⚙</button>
         <button class="talkbtn" id="talk" title="Huddle" aria-label="Huddle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7h11l-3-3"/><path d="M16 17H5l3 3"/></svg><span class="talklab">Huddle</span></button>
         </div>
       </div>
       <div id="findbar"><input id="findq" placeholder="Search this chat…"/><span id="findn"></span><button type="button" id="findprev" title="previous">‹</button><button type="button" id="findnext" title="next">›</button><button type="button" id="findx" title="close">×</button></div>
       <div id="chat">
-        <div id="chatlog"><div class="empty" id="empty"><h2>Swarm</h2><div>Pick a bot on the left.<br>⚙ = name, shape, color and boss.<br>On iPhone: swipe to close.</div></div></div>
+        <div id="chatlog"><div class="empty" id="empty"><h2>Swarm</h2><div>Tap <b>+ Bot</b> (top) to start.<br>Then type below.<br>On iPhone: swipe to close.</div></div></div>
       </div>
       <div id="live"><div class="lbar"><span class="llive"><span class="dots3"><i></i><i></i><i></i></span></span></div><div id="liveact"></div><span class="wtime" id="livetime"></span></div>
       <div id="browsecard"><div class="bcard" id="bcardopen"><img id="bcardimg" alt=""/><div class="bmeta"><b id="bcardlab">Browser</b><span id="bcardtitle">page</span><em>Open to control</em></div><button type="button" id="bcardx" aria-label="hide">×</button></div></div>
@@ -570,7 +573,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
         <div class="perm"><div><b>Dark mode</b><div class="st">turn the light interface off</div></div><button class="toggle" data-k="theme" id="themetog"><i></i></button></div>
         <div class="perm"><div><b>Control terminals</b><div class="st">send messages to Grok agents</div></div><button class="toggle on" data-k="terminals"><i></i></button></div>
         <div class="perm"><div><b>New agent</b><div class="st">plus button opens a new agent</div></div><button class="toggle on" data-k="new_terminal"><i></i></button></div>
-        <div class="perm"><div><b>Browser</b><div class="st">bubble in chat, tap to enlarge and control</div></div><button class="toggle on" data-k="browser"><i></i></button></div>
+        <div class="perm"><div><b>Browser</b><div class="st">open from chat, tap the page to control</div></div><button class="toggle on" data-k="browser"><i></i></button></div>
         <div class="perm"><div><b>Huddle</b><div class="st">agents may message each other</div></div><button class="toggle on" data-k="overleg"><i></i></button></div>
         <div class="perm"><div><b>Push notifications</b><div class="st">phone alert when a bot looks done — off by default</div></div><button class="toggle" data-k="push"><i></i></button></div>
         <div class="perm"><div><b>Keep screen on</b><div class="st">iPhone stays awake while Swarm is open, so you can watch the chat</div></div><button class="toggle on" data-k="awake"><i></i></button></div>
@@ -1310,6 +1313,7 @@ function selectAgent(id, slug){
   }
   chatToken++;
   lastChatKey="";
+  lastShotN=0;
   const tok=chatToken;
   pinNext=true;
   stickBottom=true;
@@ -2993,6 +2997,7 @@ async function sendOverleg(toId){
   toast(toId==="all"?"sent to the team":"sent");
 }
 function browseBot(){ return slugOf(current)||"shared"; }
+function browseBody(o){ o=o||{}; o.bot=browseBot(); return JSON.stringify(o); }
 function shotUrl(){ return BASE+"/api/browse/shot?k="+encodeURIComponent(KEY)+"&bot="+encodeURIComponent(browseBot())+"&t="+Date.now(); }
 function isSelfBrowse(url, title){
   if(/^\s*Swarm\b/i.test(title||"")) return true;
@@ -3150,18 +3155,18 @@ function armBrowseType(){
 }
 async function browseClick(img, ev){
   const p=shotPoint(img, ev); if(!p) return;
-  try{ await api("/api/browse/click",{method:"POST",body:JSON.stringify(p)}); setTimeout(pollBrowse,200); }
+  try{ await api("/api/browse/click",{method:"POST",body:browseBody(p)}); setTimeout(pollBrowse,200); }
   catch(e){toast(e.message)}
   armBrowseType();
 }
 async function browseScroll(img, ev){
   const p=shotPoint(img, ev) || {nx:0.5,ny:0.5};
-  try{ await api("/api/browse/scroll",{method:"POST",body:JSON.stringify({nx:p.nx,ny:p.ny,dy:ev.deltaY,dx:ev.deltaX})}); }
+  try{ await api("/api/browse/scroll",{method:"POST",body:browseBody({nx:p.nx,ny:p.ny,dy:ev.deltaY,dx:ev.deltaX})}); }
   catch{}
 }
 async function sendBrowseKey(key, text){
-  if(text) await api("/api/browse/type",{method:"POST",body:JSON.stringify({text,submit:false})});
-  else await api("/api/browse/key",{method:"POST",body:JSON.stringify({key:key||"Enter"})});
+  if(text) await api("/api/browse/type",{method:"POST",body:browseBody({text,submit:false})});
+  else await api("/api/browse/key",{method:"POST",body:browseBody({key:key||"Enter"})});
   setTimeout(pollBrowse,180);
 }
 function bindBrowseField(el){
@@ -3175,13 +3180,13 @@ function bindBrowseField(el){
     try{
       if(v.length>prev.length && v.startsWith(prev)) await sendBrowseKey(null, v.slice(prev.length));
       else if(v.length<prev.length && prev.startsWith(v)) await sendBrowseKey("Backspace");
-      else if(v.length<prev.length) await api("/api/browse/key",{method:"POST",body:JSON.stringify({key:"Backspace",n:prev.length-v.length})});
+      else if(v.length<prev.length) await api("/api/browse/key",{method:"POST",body:browseBody({key:"Backspace",n:prev.length-v.length})});
     }catch(e){toast(e.message)}
   });
   el.addEventListener("keydown",async ev=>{
     if(ev.key==="Enter"){
       ev.preventDefault();
-      try{ await api("/api/browse/type",{method:"POST",body:JSON.stringify({text:"",submit:true})}); el.value=""; last=""; setTimeout(pollBrowse,250); }
+      try{ await api("/api/browse/type",{method:"POST",body:browseBody({text:"",submit:true})}); el.value=""; last=""; setTimeout(pollBrowse,250); }
       catch(e){toast(e.message)}
     }
   });
@@ -3240,7 +3245,7 @@ $("watchimg").addEventListener("touchend",()=>{ watchTouch=null; },{passive:true
 $("watchtype").onsubmit=async ev=>{
   ev.preventDefault();
   const t=$("watchin").value; $("watchin").value="";
-  try{ await api("/api/browse/type",{method:"POST",body:JSON.stringify({text:t,submit:true})}); setTimeout(pollBrowse,250); }
+  try{ await api("/api/browse/type",{method:"POST",body:browseBody({text:t,submit:true})}); setTimeout(pollBrowse,250); }
   catch(e){toast(e.message)}
 };
 (function(){
@@ -3267,12 +3272,12 @@ $("watchtype").onsubmit=async ev=>{
   });
   window.addEventListener("pointerup",()=>{mode=null});
 })();
-$("bgo").onclick=async()=>{const u=$("burl").value.trim(); if(!u)return; try{const d=await api("/api/browse/open",{method:"POST",body:JSON.stringify({url:u})}); $("burl").value=d.url||u; try{await api("/api/browse/front",{method:"POST",body:"{}"});}catch{}}catch(e){toast(e.message)}};
-if($("bfront")) $("bfront").onclick=async()=>{try{await api("/api/browse/front",{method:"POST",body:"{}"});}catch(e){toast(e.message)}};
+$("bgo").onclick=async()=>{const u=$("burl").value.trim(); if(!u)return; try{const d=await api("/api/browse/open",{method:"POST",body:browseBody({url:u})}); $("burl").value=d.url||u; try{await api("/api/browse/front",{method:"POST",body:browseBody({})});}catch{}}catch(e){toast(e.message)}};
+if($("bfront")) $("bfront").onclick=async()=>{try{await api("/api/browse/front",{method:"POST",body:browseBody({})});}catch(e){toast(e.message)}};
 $("burl").addEventListener("keydown",e=>{if(e.key==="Enter"){$("bgo").click();e.preventDefault()}});
 $("bback").onclick=async()=>{
   if(window.matchMedia("(max-width:720px)").matches){ goHome(); return; }
-  try{const d=await api("/api/browse/back",{method:"POST",body:"{}"}); if(d.url)$("burl").value=d.url}catch(e){toast(e.message)}
+  try{const d=await api("/api/browse/back",{method:"POST",body:browseBody({})}); if(d.url)$("burl").value=d.url}catch(e){toast(e.message)}
 };
 $("bstage").onclick=async ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } browseClick($("bframe"), ev); };
 $("bstage").addEventListener("wheel",ev=>{ev.preventDefault(); browseScroll($("bframe"), ev);},{passive:false});
@@ -3290,7 +3295,7 @@ $("bstage").addEventListener("touchmove",ev=>{
   browseScroll($("bframe"), {deltaY:-dy*1.6, deltaX:-dx*1.6, clientX:t.clientX, clientY:t.clientY});
   watchTouch={x:t.clientX,y:t.clientY};
 },{passive:false});
-$("bcomposer").onsubmit=async ev=>{ev.preventDefault(); const t=$("btype").value; $("btype").value=""; try{await api("/api/browse/type",{method:"POST",body:JSON.stringify({text:t,submit:true})}); $("btype").value="";}catch(e){toast(e.message)}};
+$("bcomposer").onsubmit=async ev=>{ev.preventDefault(); const t=$("btype").value; $("btype").value=""; try{await api("/api/browse/type",{method:"POST",body:browseBody({text:t,submit:true})}); $("btype").value="";}catch(e){toast(e.message)}};
 bindBrowseField($("btype"));
 bindBrowseField($("watchin"));
 bindBrowseField($("bkeys"));

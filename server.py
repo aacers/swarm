@@ -56,10 +56,23 @@ TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.59"
+VERSION = "1.8.61"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
-STABLE_PUB = "https://bumblly.com/s"
+STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
+
+
+def public_base() -> str:
+    env = (os.environ.get("SWARM_PUBLIC_URL") or "").strip().rstrip("/")
+    if env:
+        return env
+    p = STATE_DIR / "public-url.txt"
+    try:
+        if p.is_file():
+            return p.read_text(encoding="utf-8").splitlines()[0].strip().rstrip("/")
+    except Exception:
+        pass
+    return ""
 JSON_BODY_MAX = 200_000
 UPLOAD_BODY_MAX = 16_800_000  # 12 MB file + base64 JSON
 UPLOAD_FILE_MAX = 12_000_000
@@ -6166,7 +6179,7 @@ def make_handler(app: App):
                     {
                         "ok": True,
                         "lan": f"http://{lan_ip()}:{app.port}/?k={app.token}",
-                        "pub": f"{STABLE_PUB}/?k={app.token}",
+                        "pub": (f"{public_base()}/?k={app.token}" if public_base() else ""),
                         "cf": pub,
                     }
                 )
@@ -7005,6 +7018,30 @@ def publish_phone_page(primary: str, lan: str) -> None:
         pass
 
 
+def ensure_browse_daemon() -> None:
+    """Start the per-bot Chrome helper if Playwright is installed."""
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8791/health", timeout=0.5).read()
+        return
+    except Exception:
+        pass
+    try:
+        import playwright  # noqa: F401
+    except Exception:
+        print("→ browser off (pip install playwright && playwright install chromium)", flush=True)
+        return
+    try:
+        subprocess.Popen(
+            [sys.executable, str(ROOT / "browse_daemon.py")],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        print("→ per-bot browser on :8791", flush=True)
+    except Exception as exc:
+        print("browse daemon", exc, flush=True)
+
+
 def write_urls(primary: str, lan: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     URL_FILE.write_text(
@@ -7056,23 +7093,27 @@ def main() -> None:
             pass
 
     threading.Thread(target=_adopt_soon, daemon=True).start()
+    threading.Thread(target=ensure_browse_daemon, daemon=True).start()
 
     # Keep display awake while this remote is up
     caff = subprocess.Popen(["caffeinate", "-dims"])
 
     ip = lan_ip()
     lan = f"http://{ip}:{port}/?k={token}"
-    primary = lan
-    print(f"→ imac-phone v{VERSION}")
-    print(f"→ UI op 0.0.0.0:{port}")
-    primary = f"{STABLE_PUB}/?k={token}"
+    pub = public_base()
+    primary = f"{pub}/?k={token}" if pub else lan
+    print(f"→ Swarm v{VERSION}")
+    print(f"→ UI on 0.0.0.0:{port}")
     write_urls(primary, lan)
     print()
     print("=" * 56)
-    print("  iMac → iPhone  (no TeamViewer)")
+    print("  Swarm  ·  Mac → iPhone")
     print("=" * 56)
-    print(f"  5G / overal:  {primary}")
-    print(f"  Zelfde wifi:  {lan}")
+    print(f"  Phone (same Wi-Fi):  {lan}")
+    if pub:
+        print(f"  Public / 5G:         {primary}")
+    else:
+        print("  Public / 5G:         set ~/.grok/imac-phone/public-url.txt")
     print("=" * 56)
     try:
         import qrcode

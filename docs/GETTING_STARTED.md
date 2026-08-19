@@ -1,6 +1,14 @@
 # Getting started
 
-Swarm runs on **your Mac**. The phone is only the remote. After clone you still need tmux, one AI CLI, and PyObjC.
+Usual path — one command after clone:
+
+```bash
+./install.sh
+```
+
+Add `--browser` for a Chrome per bot. Below is the manual version if that script cannot run.
+
+Swarm runs on **your Mac**. The phone is only the remote.
 
 ## 1. macOS tools
 
