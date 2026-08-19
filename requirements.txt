@@ -1,0 +1,2 @@
+# Uses the desktop-harness venv (pyobjc already installed).
+# No extra pip packages required.

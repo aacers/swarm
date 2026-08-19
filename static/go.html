@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Swarm"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#14161c"/>
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=7"/>
+<link rel="icon" type="image/png" href="icons/app.png?v=7"/>
+<title>Swarm</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y;background:#101218;color:#e6e8ef;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
+body{display:flex;flex-direction:column;align-items:stretch;padding:max(28px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom))}
+.wrap{width:100%;max-width:400px;margin:0 auto}
+.mark{width:56px;height:56px;border-radius:16px;overflow:hidden;display:block;background:#10152a}
+.mark img{width:56px;height:56px;display:block;object-fit:cover}
+h1{margin:16px 0 8px;font-size:28px;letter-spacing:-.03em}
+p{color:#a7aebc;line-height:1.45;margin:0 0 8px;overflow-wrap:anywhere}
+a{display:block;text-decoration:none;color:#fff;border-radius:18px;padding:16px 16px;margin:12px 0 0;font-weight:800;font-size:17px;text-align:center;width:100%}
+.thuis{background:linear-gradient(135deg,#16a34a,#22c55e)}
+.weg{background:linear-gradient(135deg,#6b64d8,#4a78d4)}
+.st{font-size:13px;font-weight:600;opacity:.88;display:block;margin-top:4px}
+.note{margin-top:22px;font-size:13px;color:#a7aebc;overflow-wrap:anywhere}
+</style></head>
+<body>
+<div class="wrap">
+<img class="mark" src="icons/app.png?v=7" alt="Swarm"/>
+<h1>Swarm</h1>
+<p>One icon. Choose where you are.<br>Home wifi is faster. 5G works everywhere.</p>
+<a class="thuis" id="lan" href="#">Home · wifi<span class="st">fast, home network only</span></a>
+<a class="weg" id="pub" href="https://bumblly.com/s/">On the go · 5G / anywhere<span class="st">works on wifi too</span></a>
+<p class="note" id="hint">Loading…</p>
+</div>
+<script>
+async function boot(){
+  let d={};
+  try{
+    const r=await fetch((location.origin.indexOf("bumblly")>=0||location.pathname.indexOf("heavy")>=0)?"heavy.json":"/connect.json",{cache:"no-store"});
+    d=await r.json();
+  }catch(e){ document.getElementById("hint").textContent="Could not load the links."; return; }
+  const lan=d.lan||"", pub=d.pub||d.public||"https://bumblly.com/s/";
+  if(lan) document.getElementById("lan").href=lan;
+  if(pub) document.getElementById("pub").href=pub;
+  document.getElementById("hint").textContent="Add this page to your Home Screen. Then tap Home or On the go.";
+  if(location.protocol==="http:" && lan && location.href.indexOf("192.168.")>=0){
+    document.getElementById("hint").textContent="You are already on home wifi.";
+  }
+}
+boot();
+</script>
+</body></html>

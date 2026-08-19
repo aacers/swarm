@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+PY="/Users/timgrootes/Projects/desktop-harness/.venv/bin/python3.11"
+if [[ ! -x "$PY" ]]; then
+  PY="$(command -v python3.11 || command -v python3)"
+fi
+exec "$PY" "$ROOT/server.py" "$@"
