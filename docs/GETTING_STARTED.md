@@ -30,7 +30,7 @@ pip install -r requirements.txt
 
 ## 3. At least one model CLI
 
-Install and sign in **one** of:
+`./install.sh` starts even if none is installed yet. For a bot to answer, install and sign in **one** of:
 
 | Bot type | CLI | Install |
 |---|---|---|
@@ -38,10 +38,12 @@ Install and sign in **one** of:
 | Claude | `claude` | [Claude Code](https://claude.ai/code) |
 | ChatGPT | `codex` | [Codex CLI](https://github.com/openai/codex) |
 
+Any other terminal CLI works too. Sign-in can happen in Swarm after you tap **+ Bot**.
+
 Check:
 
 ```bash
-which grok claude codex
+which grok claude codex gemini
 ```
 
 ## 4. Optional: per-bot browser

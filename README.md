@@ -35,7 +35,7 @@ cd swarm
 ./install.sh
 ```
 
-That installs `tmux` + Python if needed, a venv, and starts Swarm. Use it in the Mac window, or open the **Wi‑Fi** URL on your iPhone and take the same bots over. Tap **+ Bot** → pick Grok (or another CLI) → send. Sign-in for that CLI happens in Swarm.
+That is the whole setup: `tmux` + Python if needed, a venv, then Swarm starts. No extra config file. Use it in the Mac window, or open the **Wi‑Fi** URL on your iPhone and take the same bots over. Tap **+ Bot** → pick Grok (or another CLI) → send. Sign-in for that CLI happens in Swarm. If no CLI is installed yet, Swarm still opens — add one and tap **+ Bot**.
 
 Per-bot Chrome: `./install.sh --browser`
 

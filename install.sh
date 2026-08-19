@@ -38,20 +38,21 @@ if [[ "${1:-}" == "--browser" ]]; then
   playwright install chromium
 fi
 
-ok=0
-for bin in grok claude codex; do
+found=0
+for bin in grok claude codex gemini aider opencode cursor-agent amp crush; do
   if command -v "$bin" >/dev/null; then
     echo "→ found $bin"
-    ok=1
+    found=1
   fi
 done
-if [[ $ok -eq 0 ]]; then
+if [[ $found -eq 0 ]]; then
   echo ""
-  echo "No AI CLI in PATH yet. Install one, then run ./install.sh again:"
+  echo "No AI CLI in PATH yet. Swarm still starts — install one, then tap + Bot:"
   echo "  Grok     https://grok.com"
   echo "  Claude   https://claude.ai/code"
   echo "  ChatGPT  https://github.com/openai/codex"
-  exit 1
+  echo "  Any other terminal CLI works too."
+  echo ""
 fi
 
 echo ""
