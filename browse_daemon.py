@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""In-app browser. One Chrome per bot; commands run in parallel."""
+"""In-app browser. Headless Chrome per bot — no OS window beside Swarm."""
 
 from __future__ import annotations
 
@@ -47,6 +47,77 @@ def _focus_info(page) -> dict:
         return {}
 
 
+_PAGE_JS = """(n) => {
+  const vw = window.innerWidth || 1, vh = window.innerHeight || 1;
+  const sel = 'a[href],button,input,textarea,select,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[contenteditable="true"]';
+  const list = [];
+  const seen = new Set();
+  for (const el of document.querySelectorAll(sel)) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    if (r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || Number(st.opacity) === 0) continue;
+    const typ = (el.getAttribute('type') || '').toLowerCase();
+    if (typ === 'hidden') continue;
+    const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '')
+      .replace(/\\s+/g, ' ').trim().slice(0, 80);
+    const tag = el.tagName.toLowerCase();
+    const key = tag + '|' + text + '|' + Math.round(r.x) + '|' + Math.round(r.y);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push({
+      el,
+      tag,
+      type: typ,
+      text,
+      href: (el.href || '').slice(0, 180),
+      nx: (r.x + r.width / 2) / vw,
+      ny: (r.y + r.height / 2) / vh,
+    });
+    if (list.length >= 60) break;
+  }
+  let tapped = null;
+  if (n) {
+    const hit = list[n - 1];
+    if (!hit) return { ok: false, error: 'no control ' + n };
+    try { hit.el.focus(); } catch (e) {}
+    try { hit.el.click(); } catch (e) {}
+    tapped = { n, tag: hit.tag, text: hit.text, href: hit.href };
+  }
+  const controls = list.map((c, i) => ({
+    n: i + 1, tag: c.tag, type: c.type, text: c.text, href: c.href, nx: c.nx, ny: c.ny,
+  }));
+  const text = (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, 12000);
+  const links = controls.filter(c => c.href).slice(0, 40).map(c => ({ text: c.text, href: c.href }));
+  return { ok: true, text, controls, links, tapped };
+}"""
+
+
+def _page_info(page, tap: int = 0) -> dict:
+    try:
+        info = page.evaluate(_PAGE_JS, int(tap or 0)) or {}
+    except Exception:
+        info = {}
+    out = {
+        "ok": bool(info.get("ok", True)),
+        "text": info.get("text") or "",
+        "controls": info.get("controls") or [],
+        "links": info.get("links") or [],
+    }
+    if info.get("error"):
+        out["ok"] = False
+        out["error"] = info.get("error")
+    if info.get("tapped"):
+        out["tapped"] = info["tapped"]
+    try:
+        out["url"] = page.url
+        out["title"] = page.title()
+    except Exception:
+        pass
+    return out
+
+
 def _selected_text(page) -> str:
     try:
         return str(page.evaluate("() => window.getSelection ? window.getSelection().toString() : ''") or "")
@@ -82,10 +153,10 @@ def _inherit_shared_auth(page, slug: str) -> int:
     if url and url != "about:blank" and "accounts.google.com" not in url:
         return 0
     src = _existing(DEFAULT_BOT)
-    if not src:
+    if not src or src.slug == slug:
         return 0
     try:
-        got = src.call("state", timeout=6)
+        got = src.call("state", timeout=2)
         cookies = _clean_cookies((got.get("out") or {}).get("cookies") or [])
         if not cookies:
             return 0
@@ -95,8 +166,28 @@ def _inherit_shared_auth(page, slug: str) -> int:
         return 0
 
 
+# Copying Service Worker / Sessions / Cache / IndexedDB is minutes. Login is a few files.
+_SEED_FILES = (
+    "Cookies",
+    "Cookies-journal",
+    "Login Data",
+    "Login Data-journal",
+    "Login Data For Account",
+    "Login Data For Account-journal",
+    "Web Data",
+    "Web Data-journal",
+    "Account Web Data",
+    "Account Web Data-journal",
+    "Preferences",
+    "Secure Preferences",
+    "Network/Cookies",
+    "Network/Cookies-journal",
+    "Network/TransportSecurity",
+)
+
+
 def seed_profile(slug: str, force: bool = False) -> None:
-    """Copy Google/Play login from the shared Chrome profile onto a new bot profile."""
+    """Copy Google/Play cookies onto a new bot — never the whole Chrome tree."""
     if slug == DEFAULT_BOT:
         return
     src = profile_dir(DEFAULT_BOT)
@@ -104,22 +195,21 @@ def seed_profile(slug: str, force: bool = False) -> None:
     marker = dest / ".seeded-from-shared"
     if marker.exists() and not force:
         return
-    if not (src / "Default").exists():
+    src_def = src / "Default"
+    if not src_def.exists():
         return
     dest.mkdir(parents=True, exist_ok=True)
-    skip = {
-        "SingletonLock",
-        "SingletonCookie",
-        "SingletonSocket",
-        "lockfile",
-        "RunningChromeVersion",
-        "Cache",
-        "Code Cache",
-        "GPUCache",
-        "GrShaderCache",
-        "ShaderCache",
-        "DawnCache",
-    }
+    dest_def = dest / "Default"
+    dest_def.mkdir(parents=True, exist_ok=True)
+    for rel in _SEED_FILES:
+        sp, dp = src_def / rel, dest_def / rel
+        if not sp.is_file():
+            continue
+        try:
+            dp.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sp, dp)
+        except Exception:
+            pass
     for name in ("Local State", "First Run"):
         sp = src / name
         if sp.is_file():
@@ -127,17 +217,6 @@ def seed_profile(slug: str, force: bool = False) -> None:
                 shutil.copy2(sp, dest / name)
             except Exception:
                 pass
-    src_def, dest_def = src / "Default", dest / "Default"
-    if dest_def.exists() and (force or not marker.exists()):
-        try:
-            shutil.rmtree(dest_def)
-        except Exception:
-            return
-    if not dest_def.exists():
-        try:
-            shutil.copytree(src_def, dest_def, ignore=shutil.ignore_patterns(*skip))
-        except Exception:
-            return
     try:
         marker.touch()
     except Exception:
@@ -149,9 +228,9 @@ DOWNLOADS = Path.home() / ".grok" / "browser" / "downloads"
 HOST, PORT = "127.0.0.1", 8791
 MAX_LIVE = 10
 IDLE_SEC = 40 * 60
-SHOT_TTL = 0.25
+SHOT_TTL = 0.4
 
-WATCH_CMDS = {"open", "click", "type", "key", "back", "sel", "read", "scroll", "eval", "files"}
+WATCH_CMDS = {"open", "click", "type", "key", "back", "sel", "tap", "read", "page", "scroll", "eval", "files"}
 # read/eval are text-first — skip the JPEG so bots don't wait on screenshots.
 SNAP_CMDS = {"open", "click", "type", "key", "back", "sel", "scroll", "files", "mouse"}
 
@@ -160,15 +239,11 @@ _pool_lock = threading.Lock()
 _pool: dict[str, "BotBrowser"] = {}
 
 
-def _slot(slug: str) -> tuple[int, int]:
-    h = abs(hash(slug)) % 8
-    return 36 + h * 36, 36 + h * 24
-
-
 class BotBrowser:
     def __init__(self, slug: str):
         self.slug = normalize_bot(slug)
-        self.jobs: queue.Queue = queue.Queue()
+        self.jobs: queue.PriorityQueue = queue.PriorityQueue()
+        self._seq = 0
         self.lock = threading.Lock()
         self.state: dict = {
             "ok": True,
@@ -227,7 +302,11 @@ class BotBrowser:
     def call(self, cmd: str, args: dict | None = None, timeout: float = 30):
         ev = threading.Event()
         box: dict = {}
-        self.jobs.put((cmd, args or {}, ev, box))
+        pri = 1 if cmd in {"health", "snap"} else 0
+        with self.lock:
+            self._seq = int(self._seq) + 1
+            seq = self._seq
+        self.jobs.put((pri, seq, (cmd, args or {}, ev, box)))
         if not ev.wait(timeout):
             raise TimeoutError("browser timeout")
         if "error" in box:
@@ -242,7 +321,6 @@ class BotBrowser:
         ctx = None
         page = None
         cdp = None
-        x, y = _slot(self.slug)
         downloads = DOWNLOADS / self.slug
         downloads.mkdir(parents=True, exist_ok=True)
 
@@ -264,7 +342,7 @@ class BotBrowser:
             cdp = None
             launch = {
                 "user_data_dir": str(profile),
-                "headless": False,
+                "headless": True,
                 "accept_downloads": True,
                 "downloads_path": str(downloads),
                 "viewport": {"width": 1280, "height": 860},
@@ -274,17 +352,23 @@ class BotBrowser:
                 "color_scheme": "light",
                 "ignore_default_args": ["--enable-automation"],
                 "args": [
+                    "--headless=new",
                     "--disable-blink-features=AutomationControlled",
                     "--disable-sync",
                     "--no-first-run",
                     "--no-default-browser-check",
-                    "--disable-features=Translate,MediaRouter,DialMediaRouteProvider",
+                    "--disable-extensions",
+                    "--disable-component-update",
+                    "--disable-background-networking",
+                    "--disable-breakpad",
+                    "--disable-hang-monitor",
+                    "--disable-features=Translate,MediaRouter,DialMediaRouteProvider,PaintHolding,TabRestore",
                     "--disable-background-timer-throttling",
                     "--disable-renderer-backgrounding",
                     "--disable-backgrounding-occluded-windows",
                     "--disable-ipc-flooding-protection",
-                    f"--window-size=1280,860",
-                    f"--window-position={x},{y}",
+                    "--renderer-process-limit=4",
+                    "--window-size=1280,860",
                     "--hide-crash-restore-bubble",
                     "--disable-session-crashed-bubble",
                 ],
@@ -301,52 +385,27 @@ class BotBrowser:
                 pass
             page = ctx.pages[-1] if ctx.pages else ctx.new_page()
             try:
-                page.set_default_timeout(4000)
-                page.set_default_navigation_timeout(12000)
+                page.set_default_timeout(2500)
+                page.set_default_navigation_timeout(8000)
             except Exception:
                 pass
             _inherit_shared_auth(page, self.slug)
             return page
 
         def snap(p, force: bool = False) -> bytes:
-            nonlocal cdp
             cached = self.shot()
             if not force and cached and (time.time() - self.last_shot_at) < SHOT_TTL:
                 return cached
-            data = b""
             try:
-                try:
-                    if cdp is None:
-                        cdp = p.context.new_cdp_session(p)
-                    vp = p.viewport_size or {"width": 1280, "height": 860}
-                    raw = cdp.send(
-                        "Page.captureScreenshot",
-                        {
-                            "format": "jpeg",
-                            "quality": 32,
-                            "optimizeForSpeed": True,
-                            "captureBeyondViewport": False,
-                            "clip": {
-                                "x": 0,
-                                "y": 0,
-                                "width": int(vp["width"]),
-                                "height": int(vp["height"]),
-                                "scale": 1,
-                            },
-                        },
-                    )
-                    data = base64.b64decode(raw.get("data") or "")
-                except Exception:
-                    cdp = None
-                    data = p.screenshot(
-                        type="jpeg",
-                        quality=36,
-                        full_page=False,
-                        animations="disabled",
-                        caret="initial",
-                        scale="css",
-                        timeout=2500,
-                    )
+                data = p.screenshot(
+                    type="jpeg",
+                    quality=32,
+                    full_page=False,
+                    animations="disabled",
+                    caret="initial",
+                    scale="css",
+                    timeout=800,
+                )
                 if data:
                     url = ""
                     try:
@@ -360,194 +419,282 @@ class BotBrowser:
 
         while True:
             job = self.jobs.get()
-            if job is None:
+            if job is None or (isinstance(job, tuple) and job[-1] is None):
                 break
-            cmd, args, ev, box = job
+            cmd, args, ev, box = job[2] if isinstance(job, tuple) and len(job) == 3 else job
             try:
                 if cmd in WATCH_CMDS:
                     self.mark(cmd, True)
-                p = live()
-                if cmd in {"health", "snap"}:
-                    title = ""
-                    try:
-                        title = p.title()
-                    except Exception:
-                        pass
-                    self.store_shot(b"", p.url, title)
-                    box["out"] = self.health()
-                    if cmd == "snap":
-                        box["bytes"] = snap(p)
-                elif cmd == "shot":
-                    box["bytes"] = snap(p) or self.shot()
-                    box["out"] = self.health()
-                elif cmd == "open":
+                gated = False
+                if cmd == "open" and not args.get("chrome") and not args.get("force"):
                     url = args.get("url") or "about:blank"
                     if not str(url).startswith(("http://", "https://", "about:")):
                         url = "https://" + url
-                    self.mark("open", True, url=str(url))
-                    p.goto(str(url), wait_until="domcontentloaded", timeout=12000)
-                    self.request_shot()
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
-                elif cmd == "click":
-                    nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
-                    vp = p.viewport_size or {"width": 1280, "height": 800}
-                    p.mouse.click(nx * vp["width"], ny * vp["height"], delay=0)
-                    info = _focus_info(p)
-                    self.request_shot()
-                    box["out"] = {
-                        "ok": True,
-                        "url": p.url,
-                        "bot": self.slug,
-                        "editable": bool(info.get("editable")),
-                        "tag": info.get("tag") or "",
-                    }
-                elif cmd == "mouse":
-                    action = str(args.get("action") or "click")
-                    nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
-                    vp = p.viewport_size or {"width": 1280, "height": 800}
-                    x, y = nx * vp["width"], ny * vp["height"]
-                    selected = ""
-                    if action == "down":
-                        p.mouse.move(x, y)
-                        p.mouse.down()
-                    elif action == "move":
-                        p.mouse.move(x, y)
-                    elif action in {"dbl", "dblclick"}:
-                        p.mouse.dblclick(x, y)
-                        selected = _selected_text(p)
+                    from page_fetch import gate
+
+                    g = gate(str(url), self.slug)
+                    if g.get("action") != "chrome":
+                        out = dict(g.get("page") or {})
+                        out["ok"] = True
+                        out["action"] = g.get("action")
+                        out["bot"] = self.slug
+                        box["out"] = out
+                        gated = True
+                if gated:
+                    pass
+                elif cmd in {"health", "snap"} and page is None:
+                    box["out"] = self.health()
+                    if cmd == "snap":
+                        box["bytes"] = self.shot()
+                else:
+                    p = live()
+                    if cmd in {"health", "snap"}:
+                        box["out"] = self.health()
+                        if cmd == "snap":
+                            box["bytes"] = snap(p)
+                    elif cmd == "shot":
+                        box["bytes"] = snap(p) or self.shot()
+                        box["out"] = self.health()
+                    elif cmd == "open":
+                        url = args.get("url") or "about:blank"
+                        if not str(url).startswith(("http://", "https://", "about:")):
+                            url = "https://" + url
+                        self.mark("open", True, url=str(url))
+                        try:
+                            p.goto(str(url), wait_until="commit", timeout=8000)
+                        except Exception as nav_err:
+                            low = str(nav_err).lower()
+                            if any(
+                                s in low
+                                for s in ("target closed", "browser has been closed", "crashed")
+                            ):
+                                raise
                         self.request_shot()
-                    elif action == "up":
-                        p.mouse.move(x, y)
-                        p.mouse.up()
-                        selected = _selected_text(p)
+                        if args.get("page"):
+                            try:
+                                p.wait_for_load_state("domcontentloaded", timeout=2000)
+                            except Exception:
+                                pass
+                            info = _page_info(p)
+                            info["bot"] = self.slug
+                            box["out"] = info
+                        else:
+                            title = ""
+                            try:
+                                title = p.title()
+                            except Exception:
+                                pass
+                            box["out"] = {
+                                "ok": True,
+                                "url": p.url,
+                                "title": title,
+                                "bot": self.slug,
+                            }
+                        try:
+                            from page_fetch import save_cookies
+
+                            save_cookies(
+                                self.slug,
+                                (p.context.storage_state() or {}).get("cookies") or [],
+                            )
+                        except Exception:
+                            pass
+                    elif cmd == "click":
+                        nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
+                        vp = p.viewport_size or {"width": 1280, "height": 800}
+                        p.mouse.click(nx * vp["width"], ny * vp["height"], delay=0)
+                        focus = _focus_info(p)
                         self.request_shot()
-                    else:
-                        p.mouse.click(x, y, delay=0)
+                        if args.get("page"):
+                            info = _page_info(p)
+                            info["bot"] = self.slug
+                            info["editable"] = bool(focus.get("editable"))
+                            info["tag"] = focus.get("tag") or ""
+                            box["out"] = info
+                        else:
+                            box["out"] = {
+                                "ok": True,
+                                "url": p.url,
+                                "bot": self.slug,
+                                "editable": bool(focus.get("editable")),
+                                "tag": focus.get("tag") or "",
+                            }
+                    elif cmd == "mouse":
+                        action = str(args.get("action") or "click")
+                        nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
+                        vp = p.viewport_size or {"width": 1280, "height": 800}
+                        x, y = nx * vp["width"], ny * vp["height"]
+                        selected = ""
+                        if action == "down":
+                            p.mouse.move(x, y)
+                            p.mouse.down()
+                        elif action == "move":
+                            p.mouse.move(x, y)
+                        elif action in {"dbl", "dblclick"}:
+                            p.mouse.dblclick(x, y)
+                            selected = _selected_text(p)
+                            self.request_shot()
+                        elif action == "up":
+                            p.mouse.move(x, y)
+                            p.mouse.up()
+                            selected = _selected_text(p)
+                            self.request_shot()
+                        else:
+                            p.mouse.click(x, y, delay=0)
+                            self.request_shot()
+                        out = {"ok": True, "url": p.url, "bot": self.slug}
+                        if selected:
+                            out["selected"] = selected
+                        box["out"] = out
+                    elif cmd == "type":
+                        text = str(args.get("text") or "")
+                        if text:
+                            p.keyboard.insert_text(text)
+                        if args.get("submit"):
+                            p.keyboard.press("Enter")
                         self.request_shot()
-                    out = {"ok": True, "url": p.url, "bot": self.slug}
-                    if selected:
-                        out["selected"] = selected
-                    box["out"] = out
-                elif cmd == "type":
-                    text = str(args.get("text") or "")
-                    if text:
-                        p.keyboard.insert_text(text)
-                    if args.get("submit"):
-                        p.keyboard.press("Enter")
-                    self.request_shot()
-                    box["out"] = {"ok": True, "url": p.url, "bot": self.slug}
-                elif cmd == "key":
-                    key = str(args.get("key") or "Enter")
-                    if key == "Backspace" and args.get("n"):
-                        for _ in range(min(40, int(args["n"]))):
-                            p.keyboard.press("Backspace")
-                    else:
-                        p.keyboard.press(key)
-                    self.request_shot()
-                    box["out"] = {"ok": True, "bot": self.slug}
-                elif cmd == "scroll":
-                    nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
-                    dy = float(args.get("dy") or 0)
-                    dx = float(args.get("dx") or 0)
-                    vp = p.viewport_size or {"width": 1280, "height": 800}
-                    p.mouse.move(nx * vp["width"], ny * vp["height"])
-                    p.mouse.wheel(dx, dy)
-                    self.request_shot()
-                    box["out"] = {"ok": True, "bot": self.slug}
-                elif cmd == "back":
-                    p.go_back(wait_until="domcontentloaded", timeout=8000)
-                    self.request_shot()
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
-                elif cmd == "front":
-                    p.bring_to_front()
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
-                elif cmd == "read":
-                    info = p.evaluate(
-                        """() => {
-                          const text = (document.body ? document.body.innerText : '')
-                            .replace(/\\s+/g, ' ').trim().slice(0, 8000);
-                          const links = [...document.querySelectorAll('a[href]')]
-                            .slice(0, 40)
-                            .map(a => ({
-                              text: (a.innerText || '').trim().slice(0, 80),
-                              href: a.href
-                            }))
-                            .filter(a => a.href && a.text);
-                          return { text, links };
-                        }"""
-                    )
-                    box["out"] = {
-                        "ok": True,
-                        "url": p.url,
-                        "title": p.title(),
-                        "text": (info or {}).get("text") or "",
-                        "links": (info or {}).get("links") or [],
-                        "bot": self.slug,
-                    }
-                    self.mark("read", False, url=p.url, title=p.title())
-                elif cmd == "sel":
-                    sel = str(args.get("selector") or "").strip()
-                    if not sel:
-                        raise RuntimeError("no selector")
-                    p.click(sel, timeout=2500, no_wait_after=True)
-                    self.request_shot()
-                    box["out"] = {"ok": True, "url": p.url, "bot": self.slug}
-                elif cmd == "state":
-                    incoming = args.get("cookies")
-                    if incoming is not None:
-                        cookies = _clean_cookies(incoming)
-                        if cookies:
-                            p.context.add_cookies(cookies)
-                        box["out"] = {"ok": True, "n": len(cookies), "bot": self.slug}
-                    else:
-                        st = p.context.storage_state()
+                        box["out"] = {"ok": True, "url": p.url, "bot": self.slug}
+                    elif cmd == "key":
+                        key = str(args.get("key") or "Enter")
+                        if key == "Backspace" and args.get("n"):
+                            for _ in range(min(40, int(args["n"]))):
+                                p.keyboard.press("Backspace")
+                        else:
+                            p.keyboard.press(key)
+                        self.request_shot()
+                        box["out"] = {"ok": True, "bot": self.slug}
+                    elif cmd == "scroll":
+                        nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
+                        dy = float(args.get("dy") or 0)
+                        dx = float(args.get("dx") or 0)
+                        vp = p.viewport_size or {"width": 1280, "height": 800}
+                        p.mouse.move(nx * vp["width"], ny * vp["height"])
+                        p.mouse.wheel(dx, dy)
+                        self.request_shot()
+                        box["out"] = {"ok": True, "bot": self.slug}
+                    elif cmd == "back":
+                        try:
+                            p.go_back(wait_until="commit", timeout=5000)
+                        except Exception:
+                            pass
+                        self.request_shot()
+                        title = ""
+                        try:
+                            title = p.title()
+                        except Exception:
+                            pass
+                        box["out"] = {"ok": True, "url": p.url, "title": title, "bot": self.slug}
+                    elif cmd in {"front", "wake"}:
+                        title = ""
+                        try:
+                            title = p.title()
+                        except Exception:
+                            pass
+                        box["out"] = {"ok": True, "url": p.url, "title": title, "bot": self.slug}
+                    elif cmd in {"read", "page"}:
+                        info = _page_info(p)
+                        info["bot"] = self.slug
+                        box["out"] = info
+                        self.mark("read", False, url=p.url, title=info.get("title") or "")
+                    elif cmd == "tap":
+                        n = int(args.get("n") or 0)
+                        if n < 1:
+                            raise RuntimeError("tap needs n>=1")
+                        info = _page_info(p, tap=n)
+                        if not info.get("ok"):
+                            raise RuntimeError(info.get("error") or "tap failed")
+                        href = str(((info.get("tapped") or {}).get("href") or ""))
+                        if href.startswith("http"):
+                            try:
+                                p.wait_for_load_state("domcontentloaded", timeout=2000)
+                            except Exception:
+                                pass
+                            info = _page_info(p)
+                            info["tapped"] = {"n": n, "href": href}
+                        self.request_shot()
+                        info["bot"] = self.slug
+                        box["out"] = info
+                    elif cmd == "sel":
+                        sel = str(args.get("selector") or "").strip()
+                        if not sel:
+                            raise RuntimeError("no selector")
+                        if sel.isdigit():
+                            info = _page_info(p, tap=int(sel))
+                            if not info.get("ok"):
+                                raise RuntimeError(info.get("error") or "tap failed")
+                        else:
+                            p.click(sel, timeout=2500, no_wait_after=True)
+                            info = _page_info(p)
+                        self.request_shot()
+                        info["bot"] = self.slug
+                        box["out"] = info
+                    elif cmd == "state":
+                        incoming = args.get("cookies")
+                        if incoming is not None:
+                            cookies = _clean_cookies(incoming)
+                            if cookies:
+                                p.context.add_cookies(cookies)
+                            box["out"] = {"ok": True, "n": len(cookies), "bot": self.slug}
+                        else:
+                            st = p.context.storage_state()
+                            box["out"] = {
+                                "ok": True,
+                                "cookies": st.get("cookies") or [],
+                                "bot": self.slug,
+                                "url": p.url,
+                            }
+                    elif cmd == "eval":
+                        js = str(args.get("js") or "")
+                        if not js:
+                            raise RuntimeError("no js")
+                        result = p.evaluate(js)
                         box["out"] = {
                             "ok": True,
-                            "cookies": st.get("cookies") or [],
-                            "bot": self.slug,
                             "url": p.url,
+                            "title": p.title(),
+                            "result": result,
+                            "bot": self.slug,
                         }
-                elif cmd == "eval":
-                    js = str(args.get("js") or "")
-                    if not js:
-                        raise RuntimeError("no js")
-                    result = p.evaluate(js)
-                    box["out"] = {
-                        "ok": True,
-                        "url": p.url,
-                        "title": p.title(),
-                        "result": result,
-                        "bot": self.slug,
-                    }
-                elif cmd == "files":
-                    sel = str(args.get("selector") or "input[type=file]").strip()
-                    raw = args.get("paths") or args.get("path") or []
-                    if isinstance(raw, str):
-                        paths = [raw]
+                    elif cmd == "files":
+                        sel = str(args.get("selector") or "input[type=file]").strip()
+                        raw = args.get("paths") or args.get("path") or []
+                        if isinstance(raw, str):
+                            paths = [raw]
+                        else:
+                            paths = [str(x) for x in raw]
+                        paths = [x for x in paths if x]
+                        if not paths:
+                            raise RuntimeError("no files")
+                        for fp in paths:
+                            if not Path(fp).is_file():
+                                raise RuntimeError(f"missing file: {fp}")
+                        loc = p.locator(sel).first
+                        loc.set_input_files(paths, timeout=4000)
+                        self.request_shot()
+                        box["out"] = {
+                            "ok": True,
+                            "n": len(paths),
+                            "url": p.url,
+                            "title": p.title(),
+                            "bot": self.slug,
+                        }
                     else:
-                        paths = [str(x) for x in raw]
-                    paths = [x for x in paths if x]
-                    if not paths:
-                        raise RuntimeError("no files")
-                    for fp in paths:
-                        if not Path(fp).is_file():
-                            raise RuntimeError(f"missing file: {fp}")
-                    loc = p.locator(sel).first
-                    loc.set_input_files(paths, timeout=4000)
-                    self.request_shot()
-                    box["out"] = {
-                        "ok": True,
-                        "n": len(paths),
-                        "url": p.url,
-                        "title": p.title(),
-                        "bot": self.slug,
-                    }
-                else:
-                    box["out"] = {"ok": False, "error": "unknown"}
+                        box["out"] = {"ok": False, "error": "unknown"}
             except Exception as e:
                 box["error"] = str(e)
-                page = None
-                cdp = None
+                low = str(e).lower()
+                if any(
+                    s in low
+                    for s in (
+                        "target closed",
+                        "target page, context or browser has been closed",
+                        "browser has been closed",
+                        "has been closed",
+                        "crashed",
+                    )
+                ):
+                    page = None
+                    cdp = None
                 self.mark(cmd or "error", False)
             else:
                 if cmd in WATCH_CMDS and cmd not in {"read"}:
@@ -561,20 +708,20 @@ class BotBrowser:
 
     def snapper(self) -> None:
         while True:
-            time.sleep(0.18)
+            time.sleep(0.4)
             st = self.health()
             now = time.time()
             age = now - float(st.get("at") or 0)
             shot_age = now - float(st.get("shot_at") or 0)
             want = bool(st.get("want_shot"))
-            if not want and not st.get("busy") and age > 12:
+            if not want and not st.get("busy") and age > 2.5:
                 continue
-            if not want and shot_age < SHOT_TTL:
+            if shot_age < SHOT_TTL:
                 continue
             if not self.jobs.empty():
                 continue
             try:
-                self.call("snap", timeout=3)
+                self.call("snap", timeout=1.5)
                 with self.lock:
                     self.state["want_shot"] = False
             except Exception:
@@ -629,8 +776,8 @@ def cached_shot(bot: str | None = None) -> bytes:
 def _existing(bot: str | None) -> BotBrowser | None:
     slug = normalize_bot(bot) if bot else ""
     with _pool_lock:
-        if slug and slug in _pool:
-            return _pool[slug]
+        if slug:
+            return _pool.get(slug)
         if DEFAULT_BOT in _pool:
             return _pool[DEFAULT_BOT]
         return next(iter(_pool.values()), None)
@@ -655,7 +802,7 @@ def _evict_idle() -> None:
                 break
             dead = _pool.pop(k, None)
             if dead:
-                dead.jobs.put(None)
+                dead.jobs.put((0, 0, None))
 
 
 def get_bot(bot: str | None) -> BotBrowser:
@@ -972,7 +1119,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/health":
                 self._json(cached_health(bot if "bot=" in raw else None))
                 return
-            if path == "/read":
+            if path == "/fetch":
+                from urllib.parse import parse_qs
+
+                from page_fetch import fetch_page
+
+                qs = parse_qs(raw.split("?", 1)[-1] if "?" in raw else "")
+                url = (qs.get("url") or [""])[0]
+                self._json(fetch_page(url, bot=bot))
+                return
+            if path in {"/read", "/page"}:
                 self._json(call("read", bot=bot)["out"])
                 return
             if path in {"/shot", "/frame"}:
@@ -1026,7 +1182,7 @@ class Handler(BaseHTTPRequestHandler):
                     extra = call("open", {"url": url}, bot=bot)["out"] or {}
                 self._json({"ok": True, "n": len(cookies), "bot": bot, "from": src, **extra})
                 return
-            if path in {"open", "click", "type", "key", "back", "front", "read", "sel", "scroll", "eval", "files", "mouse", "state"}:
+            if path in {"open", "click", "type", "key", "back", "front", "wake", "read", "page", "sel", "tap", "scroll", "eval", "files", "mouse", "state"}:
                 self._json(call(path, body, bot=bot)["out"])
                 return
             self._json({"error": "not found"}, 404)

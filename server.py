@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 import Quartz
 import roster as rosterlib
 import agents_tmux
+import page_fetch
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -60,7 +61,7 @@ TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.79"
+VERSION = "1.8.95"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
 STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
@@ -1983,7 +1984,11 @@ _last_loops = 0.0
 _last_loop_fire = 0.0
 _wiped_extras = False
 LOOP_STAGGER_SEC = 90.0
-LOOP_BRIEF = "\n\nKort. Geen huddle, geen extra agent. Niks te doen? Antwoord alleen: Klaar."
+LOOP_BRIEF = (
+    "\n\nScheduled tick. Do not continue the previous user chat. "
+    "No huddle, no extra agent. Nothing to do? Reply only: Klaar."
+)
+_LOOP_RUNNING_RE = re.compile(r"(?i)loop still running|\bqueued — Enter to send")
 _HUDDLE_PREFIX_RE = re.compile(
     r"^\[(?:Huddle from|Overleg van)\s+[^\]]*\]:\s*",
     re.I,
@@ -2353,6 +2358,10 @@ def tick_loops() -> None:
                     pane = agents_tmux.capture_pane(tmux, 16)
                 except Exception:
                     pane = ""
+                # A running Grok loop still shows an idle composer — do not
+                # queue a second tick on top (that was the usage spike).
+                if _LOOP_RUNNING_RE.search(pane or ""):
+                    continue
                 if re.search(r"│\s*❯\s+\S", pane or ""):
                     continue
             name = loop.get("name") or "Loop"
@@ -3899,8 +3908,8 @@ def merge_file_cards(msgs: list[dict], swarm: list[dict]) -> list[dict]:
 def maybe_note_progress(
     slug: str, prog: dict | None, elapsed_s: float = 0, last_user_at: float | None = None
 ) -> None:
-    if not slug or not (prog or {}).get("waiting"):
-        return
+    """No-op. The live pane is the transcript — extra jsonl pills were noise."""
+    return
     pills = progress_pills(prog, elapsed_s)
     if not pills:
         return
@@ -4063,13 +4072,12 @@ def collect_chat(win: dict) -> dict:
         maybe_note_progress(slug, prog, elapsed, last_user_at)
     if slug:
         more = rosterlib.load_swarm_msgs(slug) or swarm_all
-        msgs = merge_progress_notes(msgs, more)
         msgs = merge_file_cards(msgs, more)
     term: list[dict] = []
     tmux_live = str(packed.get("tmux") or "")
     if tmux_live:
         try:
-            term = style_pane(agents_tmux.capture_pane(tmux_live, 90))
+            term = style_pane(agents_tmux.capture_pane(tmux_live, 160))
         except Exception:
             term = []
     out = {
@@ -4193,7 +4201,7 @@ def _clear_tmux_overlay(tmux: str) -> None:
         pass
 
 
-def _send_when_ready(tmux: str, text: str, timeout: float = 80.0) -> None:
+def _send_when_ready(tmux: str, text: str, timeout: float = 20.0) -> None:
     """Wait until Grok can take a message, then paste+Enter. Do not fire into a live turn."""
     if not tmux or not (text or "").strip():
         return
@@ -4474,9 +4482,93 @@ def is_stop_command(text: str) -> bool:
     return bool(_STOP_CMD_RE.match((text or "").strip()))
 
 
+_GLAB_APPS = {
+    "naptara": "Naptara",
+    "pupwatch": "PupWatch",
+    "docmint": "DocMint",
+    "roadlock": "Roadlock",
+}
+_GLAB_RUN = {
+    "naptara": ("com.bumblly.naptara", "/Users/timgrootes/Projects/NaptaraAndroid"),
+    "pupwatch": (
+        "com.bumblly.pupwatch",
+        "/Users/timgrootes/Documents/Codex/2026-06-24/ja-hier-zit-mogelijk-de-echte/PupWatch",
+    ),
+    "docmint": ("com.bumblly.docmint", "/Users/timgrootes/Projects/DocMintAndroid"),
+    "roadlock": ("com.bumblly.roadlock", "/Users/timgrootes/Projects/Roadlock"),
+}
+
+
+def expand_glab_command(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw.lower().startswith("/glab"):
+        return raw
+    parts = raw.split()
+    cmd = (parts[1] if len(parts) > 1 else "").lower()
+    extra = [p.lower() for p in parts[2:]]
+    app = next((_GLAB_APPS[t] for t in extra if t in _GLAB_APPS), "")
+    app_bit = f" op {app}" if app else ""
+    tail = " Skill device-lab. Geen desktop-harness, geen muis."
+    if not cmd:
+        return "Toon alleen de glab-kaart (status / boot --all / team / ship). Start het lab niet."
+    if cmd == "status":
+        return "Draai `glab status`." + tail
+    if cmd == "boot":
+        flag = (
+            "--watch"
+            if "--watch" in extra
+            else "--wear"
+            if "--wear" in extra
+            else "--ios"
+            if "--ios" in extra
+            else "--android"
+            if "--android" in extra
+            else "--all"
+        )
+        return f"Draai `glab boot {flag}`." + tail
+    if cmd == "protocol":
+        return f"Draai `glab protocol`{app_bit}." + tail
+    if cmd in {"team", "lab", "signoff"}:
+        slug = next((t for t in extra if t in _GLAB_RUN), "")
+        spec = _GLAB_RUN.get(slug)
+        cmdline = (
+            f"glab lab --bundle {spec[0]} --repo {spec[1]}"
+            if spec
+            else ("glab lab" + (f" --bundle {app.lower()}" if app else ""))
+        )
+        return (
+            "NU dit commando in de terminal. Niets anders. Niet copy lezen, niet plannen, niet 'ondertussen'.\n\n"
+            f"`{cmdline}`\n\n"
+            "Geen desktop-harness, geen muis. Klaar: plak ~/.grok/imac-phone/lab/LAB.md "
+            "(green, submit_ready, blockers, release_fail)."
+        )
+    if cmd == "human":
+        return (
+            "Tim heeft de 8-minuten fysieke ronde gedaan. Draai `glab human --confirm`"
+            + (app_bit if app_bit else "")
+            + "."
+            + tail
+        )
+    if cmd == "quality":
+        return f"Draai `glab quality`{app_bit}." + tail
+    if cmd == "audit":
+        return "Draai `glab audit`." + tail
+    if cmd == "shot":
+        return "Draai `glab shot` en toon de lab-screenshot." + tail
+    if cmd == "ship":
+        if "--submit" in extra:
+            return "Tim zegt SUBMIT. Draai `glab ship --submit`. Alleen als protocol groen is."
+        return "Maak een ship-packet met `glab ship`. Niet uploaden tot Tim SUBMIT zegt."
+    rest = " ".join(parts[2:])
+    return f"Draai `glab {cmd}" + (f" {rest}" if rest else "") + "`." + tail
+
+
 def dispatch_text(win: dict, text: str, submit: bool, hinted_busy: bool = False) -> dict:
     slug = slug_for_window(win) or win.get("slug") or ""
     body = (text or "").strip()
+    if submit and body.lower().startswith("/glab"):
+        text = expand_glab_command(body)
+        body = text
     if submit and is_stop_command(body):
         out = interrupt_chat(win)
         out["via"] = "stop-cmd"
@@ -4526,6 +4618,34 @@ def dispatch_text(win: dict, text: str, submit: bool, hinted_busy: bool = False)
             pass
     if submit and is_huddle(body) and slug and live_busy(win):
         return apply_second_choice(win, slug, body, "queue", chosen_by="swarm")
+    if submit and body and slug and live_busy(win) and not is_huddle(body):
+        pane = ""
+        try:
+            name = str(win.get("tmux") or "")
+            if name:
+                pane = agents_tmux.capture_pane(name, 28)
+        except Exception:
+            pane = ""
+        if agents_tmux.pane_gui_loop(pane):
+            try:
+                interrupt_chat(win)
+            except Exception as exc:
+                print("gui-loop interrupt", exc, flush=True)
+            deliver_user(win, text, True)
+            if slug:
+                _mark_submit(slug)
+                try:
+                    rosterlib.remember_swarm_msg(slug, "user", body)
+                except Exception:
+                    pass
+            return {
+                "ok": True,
+                "via": "web-steer",
+                "choice": "steer",
+                "helper": False,
+                "queued": False,
+                "text": body,
+            }
     if (
         submit
         and body
@@ -4537,7 +4657,7 @@ def dispatch_text(win: dict, text: str, submit: bool, hinted_busy: bool = False)
     ):
         choice = classify_second(win, body, slug)
         return apply_second_choice(win, slug, body, choice, chosen_by="swarm")
-    deliver_text(win, text, submit)
+    deliver_user(win, text, submit)
     if submit and body:
         _mark_submit(slug)
         if slug:
@@ -5722,9 +5842,20 @@ def steer_into_chat(win: dict, slug: str, text: str, interrupt_first: bool = Tru
             interrupt_chat(win)
         except Exception as exc:
             print("steer interrupt", exc, flush=True)
-    deliver_text(win, text, True)
+    deliver_user(win, text, True)
     _mark_submit(slug)
     return {"ok": True, "via": "steer", "text": text}
+
+
+def deliver_user(win: dict, text: str, submit: bool) -> None:
+    """Open mentioned sites in the Swarm browser. Chat keeps the original question."""
+    if submit:
+        slug = str(win.get("slug") or slug_for_window(win) or "")
+        try:
+            page_fetch.handle_web(text, slug)
+        except Exception as exc:
+            print("handle web", exc, flush=True)
+    deliver_text(win, text, submit)
 
 
 def deliver_text(win: dict, text: str, submit: bool) -> None:
@@ -6981,7 +7112,13 @@ def make_handler(app: App):
                     return
                 if path.startswith("/api/lab/"):
                     sub = path[len("/api/lab") :]
-                    timeout = 90.0 if sub.rstrip("/") in {"/sweep", "/audit", "/install"} else 40.0
+                    cmd = sub.rstrip("/")
+                    if cmd in {"/boot", "/protocol", "/team", "/lab", "/quality", "/test"}:
+                        timeout = 900.0 if cmd in {"/team", "/lab"} else 420.0
+                    elif cmd in {"/sweep", "/audit", "/install"}:
+                        timeout = 90.0
+                    else:
+                        timeout = 40.0
                     status, ctype, data = lab_proxy("POST", sub, body, timeout=timeout)
                     self.send_response(status)
                     self.send_header("Content-Type", ctype)
@@ -7410,6 +7547,14 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8790)
     parser.add_argument("--local-only", action="store_true")
     args = parser.parse_args()
+    try:
+        import shutil
+
+        free_gb = shutil.disk_usage("/").free / 1e9
+        if free_gb < 2:
+            print(f"→ disk low: {free_gb:.1f} GB free", flush=True)
+    except Exception:
+        pass
 
     if swarm_alive_on(args.port):
         token = load_or_create_token()

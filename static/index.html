@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.79"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.95"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -217,14 +217,16 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 #chatlog .empty{margin:auto;text-align:center;align-self:center}
 #chatlog .msg{margin:0 0 5px}
 #chatlog .msg.user{align-self:flex-end;margin-left:auto;margin-right:0;margin-bottom:5px}
-#chathist{display:flex;flex-direction:column;flex:1 0 auto;min-height:100%;width:100%}
-#chathist > .daychip:first-child,
-#chathist > .msg:first-child,
-#chathist > .msg.user:first-child,
-#chathist > .msg.file:first-child,
-#chathist > .msg.fwd:first-child,
-#chathist > .msg.progress:first-child{margin-top:auto}
-#turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);position:relative;z-index:12;isolation:isolate;overflow:hidden}
+#chathist{display:flex;flex-direction:column;width:100%}
+#chatlog:not(.termish) #chathist{flex:1 0 auto;min-height:100%}
+#chatlog:not(.termish) #chathist > .daychip:first-child,
+#chatlog:not(.termish) #chathist > .msg:first-child,
+#chatlog:not(.termish) #chathist > .msg.user:first-child,
+#chatlog:not(.termish) #chathist > .msg.file:first-child,
+#chatlog:not(.termish) #chathist > .msg.fwd:first-child,
+#chatlog:not(.termish) #chathist > .msg.progress:first-child{margin-top:auto}
+#chatlog.termish #chathist{flex:0 0 auto;min-height:0}
+#turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;max-height:28vh;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);position:relative;z-index:12;isolation:isolate;overflow:hidden}
 #turnsticky .acts,#turnsticky .copy,#turnsticky .reply{display:none !important}
 #turnsticky.on{display:flex}
 #turnsticky .term-user{margin:0;max-width:100%;width:100%;align-self:stretch;padding:8px 0}
@@ -254,7 +256,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 .term-qlab{display:block;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
 .term-qrow{display:flex;align-items:flex-start;gap:10px;width:100%}
 .term-qmark{flex:0 0 auto;color:var(--accent2);font-weight:800;font-size:16px;line-height:1.45}
-.term-qtext{flex:1;min-width:0;color:var(--text);font-weight:650;font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left}
+.term-qtext{flex:1;min-width:0;color:var(--text);font-weight:650;font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 #chatlog.termish .msg.user{align-self:stretch;align-items:stretch;width:100%;max-width:100%;margin-left:0;margin-right:0}
 #chatlog.termish .msg.user .bubble.user{align-self:stretch;width:100%;max-width:100%;background:transparent;color:var(--text);border-radius:0;padding:8px 0 8px 0;text-align:left;font-weight:650}
 #chatlog.termish .msg.user .bubble.user::before{content:"❯ ";color:var(--accent2);font-weight:800}
@@ -339,7 +341,15 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 [data-theme=dark] .extra-card .who{color:#9aa3b5}
 .empty{margin:auto;text-align:center;color:var(--muted);max-width:280px}
 .empty h2{margin:0 0 6px;color:var(--text);font-size:22px}
-#composer,#waitbox,#replybar,#agentinfo{flex:0 0 auto}
+#composer,#waitbox,#replybar,#agentinfo,#slashpop{flex:0 0 auto}
+#slashpop{display:none;flex-wrap:wrap;gap:6px;padding:8px 12px 0;background:var(--side);border-top:1px solid var(--line)}
+#slashpop.on{display:flex}
+#slashpop .scmd{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;padding:8px 12px;min-height:40px;font-size:13px;font-weight:750;display:inline-flex;align-items:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+#slashpop .scmd b{font-weight:800}
+#slashpop .scmd em{color:var(--muted);font-style:normal;font-weight:600;font-size:12px}
+#slashpop .scmd:active{transform:scale(.96)}
+#slashpop.on + #composer{border-top:0}
+#main.slash #jumplatest{display:none}
 #composer{display:flex;gap:8px;padding:12px 12px;padding-bottom:max(12px, env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--side);align-items:center;flex-shrink:0;position:relative;z-index:20;width:100%;max-width:100%;min-width:0;flex-wrap:nowrap}
 #composer input{flex:1 1 0%;min-width:0;width:0;border:1px solid var(--line);background:var(--card);border-radius:18px;padding:14px 14px;font-size:16px;outline:none;min-height:48px;-webkit-user-select:text;user-select:text}
 #composer button.send{flex:0 0 auto;border:0;border-radius:14px;background:var(--accent);padding:0 14px;height:48px;min-width:68px;font-size:15px;font-weight:800;color:#eef0f8}
@@ -504,6 +514,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   #replybar{margin:0 12px 8px}
   #steerbar{padding:2px 10px 4px}
   #steer{padding:14px;font-size:16px}
+  #slashpop{padding:6px 10px 0}
   #composer{gap:6px;padding:8px 10px max(8px, env(safe-area-inset-bottom))}
   #composer input{min-height:44px;padding:11px 12px;font-size:16px;border-radius:16px}
   #composer .send,#composer .stop{padding:0 12px;height:44px;min-width:62px;font-size:15px;border-radius:14px}
@@ -567,10 +578,11 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
       <div id="replybar"></div>
       <div id="steerbar"><div id="jobpop"></div><div id="jobdock"></div><div id="alist"></div><div id="qlist"></div></div>
       <button type="button" id="jumplatest" title="Jump to latest" aria-label="Jump to latest"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span id="jumpn"></span></button>
+      <div id="slashpop" hidden></div>
       <form id="composer">
         <input type="file" id="filepick" multiple hidden accept="image/*,video/*,.pdf,.txt,.md,.csv,.json,.zip,.png,.jpg,.jpeg,.heic,.webp"/>
         <button type="button" class="ghost" id="upbtn" title="Attachment" aria-label="Attachment"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.5-9.5a4 4 0 0 1 5.7 5.7l-9.5 9.4a2 2 0 0 1-2.8-2.8l8.5-8.4"/></svg></button>
-        <input id="typebox" placeholder="Type a message…" autocomplete="off" autocorrect="off" spellcheck="true"/>
+        <input id="typebox" placeholder="Type a message…  /glab" autocomplete="off" autocorrect="off" spellcheck="true"/>
         <button type="button" class="ghost" id="vmode" title="Voice" aria-label="Voice">◎</button>
         <button type="submit" class="send" id="sendbtn">Send</button>
         <button type="button" class="stop" id="stopbtn" hidden aria-label="Stop"><span class="sq"></span>Stop</button>
@@ -1139,10 +1151,13 @@ function paintCrew(list){
   paintInbox();
 }
 function orderIndex(w){
-  if(isCeo(w)) return -1;
+  if(isCeo(w)) return -1e12;
   const slugs=roster.order||(roster.agents||[]).map(a=>a.slug);
   const i=slugs.indexOf(slugOf(w));
-  return i<0?999:i;
+  const rest=i<0?999:i;
+  if(!showBusy(w)) return 1e6+rest;
+  const started=Number(w.busy_since||w.last_submit_at||0);
+  return started>0?-started:rest;
 }
 function typePayload(w,text,submit){
   const m=metaOf(w)||{};
@@ -1230,7 +1245,7 @@ function noteBusyFlip(list){
 }
 let lastListSig="";
 function listStructSig(){
-  return windows.map(w=>[w.id,slugOf(w),isCeo(w)?1:0,labelOf(w)].join(":")).join("|");
+  return windows.map(w=>[w.id,slugOf(w),isCeo(w)?1:0,showBusy(w)?1:0,Math.round(Number(w.busy_since||w.last_submit_at||0)),labelOf(w)].join(":")).join("|");
 }
 function winOfRow(row){
   if(!row) return null;
@@ -1391,10 +1406,26 @@ if($("chatlog")) $("chatlog").addEventListener("scroll",()=>{
   paintJump();
 }, {passive:true});
 const chatCache={};
+const drafts={};
+function parkDraft(){
+  const box=$("typebox");
+  if(!box || !current) return;
+  const k=chatKey(current);
+  if(!k) return;
+  const v=box.value;
+  if(v) drafts[k]=v;
+  else delete drafts[k];
+}
+function loadDraft(k){
+  const box=$("typebox");
+  if(!box) return;
+  box.value=drafts[k]||"";
+}
 function selectAgent(id, slug){
   const next=findWin(id, slug);
   if(!next) return;
   const same=!!(current && chatKey(current)===chatKey(next));
+  if(!same) parkDraft();
   current=next;
   const want=chatKey(current);
   clearUnread(want);
@@ -1421,6 +1452,7 @@ function selectAgent(id, slug){
   lastSticky=[];
   paintSticky(false);
   paintQueue([]);
+  loadDraft(want);
   const local=pending[want]||[];
   const cached=chatCache[want]||[];
   const wait=!!(local.length || showBusy(current) || turnOpen(cached));
@@ -1436,7 +1468,7 @@ function armChat(want, tok){
   const loop=()=>{
     loadChat(want, tok);
     const fast=!!(current && (isWaiting(current)||sending||showBusy(current)));
-    chatTimer=setTimeout(loop, fast?150:450);
+    chatTimer=setTimeout(loop, fast?250:900);
   };
   loop();
 }
@@ -1711,9 +1743,14 @@ function termSig(term){
 }
 function termBodyHtml(term){
   const rows=term||[];
-  const lastStatus=[...rows].reverse().find(b=>b.kind==="status");
+  let start=0;
+  for(let i=rows.length-1;i>=0;i--){
+    if((rows[i].kind||"")==="user"){ start=i+1; break; }
+  }
+  const slice=rows.slice(start);
+  const lastStatus=[...slice].reverse().find(b=>b.kind==="status");
   let html="";
-  rows.forEach(b=>{
+  slice.forEach(b=>{
     const k=b.kind||"assistant";
     if(k==="user") return;
     const text=esc(b.text||"");
@@ -1745,6 +1782,31 @@ function termUsers(term){
   });
   return out;
 }
+function stickyClip(t){
+  t=String(t||"");
+  const cut=t.search(/\n+---+\s*\n\[web already fetched/i);
+  if(cut>=0) t=t.slice(0,cut);
+  t=t.trim();
+  if(t.length>180) t=t.slice(0,160).replace(/\s+\S*$/,"")+"…";
+  return t;
+}
+function stickyNorm(t){
+  return stickyClip(t)
+    .replace(/^(?:↩\s*)?Reply to this message\s*/i,"")
+    .replace(/^\[(?:Loop|Huddle from|Overleg van|Baas|Boss)[^\]]*\]:\s*/i,"")
+    .replace(/^❯\s*/,"")
+    .replace(/\s+/g," ")
+    .trim()
+    .toLowerCase();
+}
+function sameQ(a,b){
+  const na=stickyNorm(a), nb=stickyNorm(b);
+  if(!na||!nb) return false;
+  if(na===nb) return true;
+  if(na.startsWith(nb)||nb.startsWith(na)) return true;
+  const n=Math.min(48, na.length, nb.length);
+  return n>=24 && na.slice(0,n)===nb.slice(0,n);
+}
 function termTailUsers(term){
   const out=[];
   const rows=term||[];
@@ -1753,7 +1815,7 @@ function termTailUsers(term){
     if(k==="assistant") break;
     if(k!=="user") continue;
     const t=String(rows[i].text||"").trim();
-    if(t) out.unshift(t);
+    if(t && !out.some(x=>sameQ(x,t))) out.unshift(t);
   }
   return out;
 }
@@ -1797,35 +1859,30 @@ function collapsePills(list){
 }
 function stickyPills(msgs, term, extra){
   const raw=[];
-  const seen=new Set();
   function add(t){
-    t=String(t||"").trim();
-    if(!t) return;
-    const n=normMsg(t);
-    if(!n) return;
-    if(seen.has(n)) return;
-    for(const x of seen){ if(x.startsWith(n)||n.startsWith(x)) return; }
-    seen.add(n);
+    t=stickyClip(String(t||"").trim());
+    if(!t || !stickyNorm(t)) return;
+    const hit=raw.findIndex(x=>sameQ(x,t));
+    if(hit>=0){
+      if(t.length>raw[hit].length) raw[hit]=t;
+      return;
+    }
     raw.push(t);
   }
   const live=openTurnUsers(msgs);
   const tu=termTailUsers(term);
-  const active=live[0]||tu[0]||"";
-  if(active) add(active);
-  live.slice(1).forEach(add);
-  tu.forEach(add);
+  (tu.length?tu:live).forEach(add);
+  live.forEach(add);
   if(extra!=null && extra!==false){
-    (Array.isArray(extra)?extra:[extra]).forEach(t=>{
-      if(normMsg(t)===normMsg(active)) return;
-      add(t);
-    });
+    (Array.isArray(extra)?extra:[extra]).forEach(add);
   }
   if(!raw.length && lastSticky&&lastSticky.length && current && showBusy(current)) add(lastSticky[0]);
   const out=[];
   collapsePills(raw).forEach(t=>splitUserItems(t).forEach(x=>{
-    if(x && !out.some(y=>normMsg(y)===normMsg(x))) out.push(x);
+    if(x && !out.some(y=>sameQ(y,x))) out.push(x);
   }));
   lastSticky=out.slice(0,2);
+  if(lastSticky.length>1 && sameQ(lastSticky[0], lastSticky[1])) lastSticky=lastSticky.slice(0,1);
   return lastSticky;
 }
 function dropSticky(text){
@@ -1892,13 +1949,13 @@ function renderBubbles(msgs, extraWait, id){
   if(id!=null && (!current || !sameChat(current, id))) return;
   const el=chatLog();
   const waiting=!justStopped(current) && !!(extraWait || (current && showBusy(current)) || turnOpen(msgs));
-  const term=lastTerm||[];
+  const term=(waiting && lastTerm&&lastTerm.length)?lastTerm:[];
   const pills=stickyPills(msgs, term);
   const shown=term.length?historyOffTerm(foldTurns(msgs||[], false), term, pills):foldTurns(msgs||[], waiting);
   const body=termBodyHtml(term);
   const key=String(id||(current&&current.id)||"")+"|"+(waiting?"w":"d")+"|"+shown.length+"|"+shown.map(m=>(m.role||"")+":"+(m.at||"")+":"+(m.text||"").length+":"+(m.text||"").slice(-40)).join("\n")+"|"+termSig(term)+"|"+pills.map(normMsg).join("\n");
   if(key===lastChatKey && el.querySelector(".bubble,.msg,.fwd-head,#termview,#turnsticky")){
-    if(waiting) pinChat(true);
+    if(waiting && stickBottom) pinChat(true);
     else { sizeChatEnd(); paintWait(); parkLive(); paintJump(); }
     return;
   }
@@ -1917,28 +1974,35 @@ function renderBubbles(msgs, extraWait, id){
     return;
   }
   paintSticky(pills);
-  const feed=`<div id="termview">${body}</div>`;
   const hist=histHtml(shown);
+  const feed=term.length?`<div id="termview">${body}</div>`:"";
+  el.classList.toggle("termish", !!(term.length || pills.length));
   const view=el.querySelector("#termview");
   const histEl=el.querySelector("#chathist");
-  el.classList.toggle("termish", !!(term.length || pills.length));
-  if(view && histEl){
-    if(histEl.innerHTML!==hist) histEl.innerHTML=hist;
-    if(view.innerHTML!==body) view.innerHTML=body;
+  if(view || histEl){
+    if(shown.length){
+      if(histEl){ if(histEl.innerHTML!==hist) histEl.innerHTML=hist; }
+      else el.insertAdjacentHTML("afterbegin", `<div id="chathist">${hist}</div>`);
+    } else if(histEl) histEl.remove();
+    if(term.length){
+      const v=el.querySelector("#termview");
+      if(v){ if(v.innerHTML!==body) v.innerHTML=body; }
+      else el.insertAdjacentHTML("beforeend", feed);
+    } else if(view) view.remove();
     chatCopySrc=shown;
     sizeChatEnd();
     parkLive();
     paintWait();
-    if(waiting || pinNext||stickBottom) pinChat(true);
+    if(pinNext||stickBottom) pinChat(true);
     else paintJump();
     return;
   }
-  el.innerHTML=`<div id="chathist">${hist}</div>${term.length||pills.length?feed:""}`;
+  el.innerHTML=`${shown.length?`<div id="chathist">${hist}</div>`:""}${feed}`;
   chatCopySrc=shown;
   sizeChatEnd();
   parkLive();
   paintWait();
-  if(waiting || pinNext||stickBottom) pinChat(true);
+  if(pinNext||stickBottom) pinChat(true);
   else paintJump();
 }
 let chatCopySrc=[];
@@ -2336,6 +2400,7 @@ function paintBusyNow(){
 }
 let lastQueue=[];
 let lastSteered=null;
+const steerGone={};
 let inboxSig="";
 let assignLock=false;
 function looksFollow(t){
@@ -2344,6 +2409,107 @@ function looksFollow(t){
 function isStopCmd(t){
   return /^(stop+|stop!+|stop nu|stop dit|hou op|halt|cancel|abort)\s*[!.]*$/i.test(String(t||"").trim());
 }
+const GLAB_APPS=[
+  {id:"naptara",hint:"Naptara"},
+  {id:"pupwatch",hint:"PupWatch"},
+  {id:"docmint",hint:"DocMint"},
+  {id:"roadlock",hint:"Roadlock"}
+];
+const GLAB_OPTS=[
+  {id:"status",hint:"leeft het lab?"},
+  {id:"boot",hint:"iPhone + Play + Wear + Watch",next:[
+    {id:"--all",hint:"iPhone + Play + Wear + Watch"},
+    {id:"--ios",hint:"Swarm Lab"},
+    {id:"--android",hint:"Play"},
+    {id:"--wear",hint:"Wear OS"},
+    {id:"--watch",hint:"Apple Watch"}
+  ]},
+  {id:"lab",hint:"seniors tekenen de release",next:GLAB_APPS},
+  {id:"human",hint:"fysieke ronde gedaan",next:GLAB_APPS},
+  {id:"protocol",hint:"store-poort",next:GLAB_APPS},
+  {id:"team",hint:"zelfde als lab",next:GLAB_APPS},
+  {id:"quality",hint:"starttijd / 44pt / NL+EN",next:GLAB_APPS},
+  {id:"audit",hint:"OCR + kleuren + a11y"},
+  {id:"shot",hint:"lab-screenshot"},
+  {id:"ship",hint:"ná groen",next:[
+    {id:"packet",hint:"packet, geen upload",token:""},
+    {id:"--submit",hint:"SUBMIT naar stores"}
+  ]}
+];
+function slashState(raw){
+  const v=String(raw||"");
+  if(!v.startsWith("/")) return null;
+  const rest=v.slice(1);
+  if(!rest || "glab".startsWith(rest.toLowerCase())) return {kind:"root"};
+  const m=rest.match(/^glab(?:\s+(.*))?$/i);
+  if(!m) return null;
+  const parts=(m[1]||"").trim().split(/\s+/).filter(Boolean);
+  const cmd=(parts[0]||"").toLowerCase();
+  if(!cmd) return {kind:"glab",hits:GLAB_OPTS};
+  const opt=GLAB_OPTS.find(o=>o.id===cmd);
+  if(!opt){
+    const hits=GLAB_OPTS.filter(o=>o.id.startsWith(cmd));
+    return hits.length?{kind:"glab",hits}:null;
+  }
+  if(opt.next){
+    const extra=parts.slice(1).join(" ").toLowerCase();
+    const hits=opt.next.filter(n=>{
+      const tok=String(n.token==null?n.id:n.token).toLowerCase();
+      const label=(n.id+" "+n.hint).toLowerCase();
+      return !extra || tok.startsWith(extra) || label.includes(extra);
+    });
+    return {kind:"next",cmd:opt.id,hits:hits.length?hits:opt.next};
+  }
+  return null;
+}
+function paintSlash(){
+  const pop=$("slashpop"); const box=$("typebox");
+  if(!pop||!box) return;
+  const st=slashState(box.value);
+  const main=document.getElementById("main");
+  if(!st){
+    pop.classList.remove("on"); pop.hidden=true; pop.innerHTML="";
+    if(main) main.classList.remove("slash");
+    return;
+  }
+  let rows=[];
+  if(st.kind==="root"){
+    rows=[{lab:"/glab",hint:"lab: status · boot · protocol · team · ship",fill:"/glab "}];
+  }else{
+    rows=(st.hits||[]).map(o=>{
+      const tok=o.token==null?o.id:o.token;
+      const fill=st.kind==="next"
+        ?("/glab "+st.cmd+(tok?" "+tok:"")).trim()+" "
+        :("/glab "+o.id+(o.next?" ":""));
+      return {lab:"/glab "+(st.kind==="next"?st.cmd+" ":"")+(tok||o.id),hint:o.hint,fill};
+    });
+  }
+  const html=rows.map(r=>`<button type="button" class="scmd" data-fill="${esc(r.fill)}"><b>${esc(r.lab)}</b><em>${esc(r.hint)}</em></button>`).join("");
+  pop.hidden=false; pop.classList.add("on");
+  if(pop.innerHTML!==html) pop.innerHTML=html;
+  if(main) main.classList.add("slash");
+}
+function pickSlash(fill){
+  const box=$("typebox"); if(!box) return;
+  box.value=fill;
+  try{ box.setSelectionRange(fill.length, fill.length); }catch{}
+  box.focus();
+  paintSlash();
+}
+(function bindSlash(){
+  const box=$("typebox"); const pop=$("slashpop");
+  if(!box||!pop) return;
+  const go=()=>paintSlash();
+  box.addEventListener("input", go);
+  box.addEventListener("focus", go);
+  box.addEventListener("keyup", go);
+  pop.addEventListener("pointerdown", ev=>{
+    const b=ev.target.closest("[data-fill]");
+    if(!b) return;
+    ev.preventDefault();
+    pickSlash(b.getAttribute("data-fill")||"");
+  });
+})();
 function choiceLabel(k){
   if(k==="helper"||k==="agent") return "New agent";
   if(k==="queue") return "Queue";
@@ -2473,7 +2639,7 @@ async function loadChat(want, tok){
     if(!d.slug && d.for_id!=null && current && String(d.for_id)!==String(current.id)) return;
     if(Array.isArray(d.term)) lastTerm=d.term;
     applyChatState(d, want);
-    if(d.route && d.route.choice==="steer" && d.route.text && current && chatKey(current)===String(want) && !lastSteered && midTurn(current)){
+    if(d.route && d.route.choice==="steer" && d.route.text && current && chatKey(current)===String(want) && !lastSteered && !steerGone[want] && midTurn(current)){
       lastSteered={chat:want, text:d.route.text, by:d.route.chosen_by||"swarm", at:Date.now()};
     }
     const server=d.messages||[];
@@ -2656,6 +2822,42 @@ if($("steerbar")){
     paintInbox();
     return;
   }
+  const drop=ev.target.closest("[data-drop]");
+  if(drop && current){
+    ev.preventDefault(); ev.stopPropagation();
+    const qid=drop.dataset.qid||"";
+    const hid=drop.dataset.hid||"";
+    if(qid==="steered" || (openJob && openJob.kind==="steered")){
+      lastSteered=null;
+      steerGone[chatKey(current)]=true;
+      closeJobPop();
+      paintInbox();
+      return;
+    }
+    if(hid){
+      try{
+        const d=await api("/api/type",{method:"POST",body:JSON.stringify({...typePayload(current,"",false),op:"drophelper",hid})});
+        lastCrew=(d.crew||[]).length?d.crew:lastCrew.filter(c=>!c.helper || String(c.id)!==String(hid));
+        if(openJob && String(openJob.id)===String(hid)) openJob=null;
+        inboxSig="";
+        paintInbox();
+      }catch(e){ toast(e.message); }
+      return;
+    }
+    if(qid){
+      try{
+        const d=await api("/api/type",{method:"POST",body:JSON.stringify({...typePayload(current,"",false),op:"dequeue",qid})});
+        if(d&&d.queue) paintQueue(d.queue);
+        closeJobPop();
+        paintInbox();
+      }catch(e){ toast(e.message); }
+      return;
+    }
+    lastSteered=null;
+    closeJobPop();
+    paintInbox();
+    return;
+  }
   const b=ev.target.closest("[data-qid],[data-hid]"); if(!b||!current) return;
   ev.preventDefault(); ev.stopPropagation();
   if(assignLock) return;
@@ -2806,11 +3008,14 @@ if($("steerbar")){
   }, true);
 })();
 let lastSendAt=0;
+$("typebox").addEventListener("input", parkDraft);
 $("composer").onsubmit=async ev=>{
   ev.preventDefault(); if(!current||sending) return;
   if(Date.now()-lastSendAt<700) return;
   lastSendAt=Date.now();
   const box=$("typebox"); let text=box.value.trim(); if(!text) return;
+  const sp=$("slashpop"); if(sp){ sp.classList.remove("on"); sp.hidden=true; sp.innerHTML=""; }
+  const mn=document.getElementById("main"); if(mn) mn.classList.remove("slash");
   if(isStopCmd(text)){
     box.value="";
     stopChat();
@@ -2824,7 +3029,7 @@ $("composer").onsubmit=async ev=>{
     text=wrapReply(replyTo.text, text);
     replyTo=null; $("replybar").classList.remove("on"); $("replybar").innerHTML="";
   }
-  sending=true; box.value="";
+  sending=true; box.value=""; delete drafts[dest];
   pending[dest]=pending[dest]||[];
   if(looksLeak(text)){
     try{
@@ -2841,6 +3046,7 @@ $("composer").onsubmit=async ev=>{
   }
   const wasBusy=midTurn(destWin);
   if(!wasBusy){ lastSteered=null; if(openJob&&openJob.kind==="steered") openJob=null; }
+  delete steerGone[dest];
   const asPill=wasBusy && !quoting && !looksFollow(text);
   if(!asPill){
     markSubmit(destWin);
@@ -3342,6 +3548,7 @@ async function sendOverleg(toId){
   if(toId==="all" && current && !isCeo(current)){ toast("only the boss can message everyone"); return; }
   let text=($("typebox").value||"").trim()||(prompt("What should they do?")||"");
   text=text.trim(); if(!text) return; $("typebox").value="";
+  if(current) delete drafts[chatKey(current)];
   const from=current?labelOf(current):"Heavy";
   const targets=toId==="all"?windows.filter(w=>!current||String(w.id)!==String(current.id)):windows.filter(w=>String(w.id)===String(toId));
   if(!targets.length){ toast("no target"); return; }
@@ -3499,6 +3706,7 @@ async function startBrowse(){
     if(d.url && d.url!=="about:blank") $("burl").value=d.url;
     paintBrowse(d);
   }catch(e){ toast("browser: "+e.message); }
+  api("/api/browse/wake",{method:"POST",timeout:25000,body:browseBody({})}).catch(()=>{});
   armBrowsePoll();
 }
 function shotPoint(img, ev){
@@ -3679,7 +3887,7 @@ function armBrowseType(){
 async function browseClick(img, ev, pad){
   const p=shotPoint(img, ev); if(!p) return;
   try{
-    const d=await api("/api/browse/click",{method:"POST",body:browseBody(p)});
+    const d=await api("/api/browse/click",{method:"POST",timeout:8000,body:browseBody(p)});
     setTimeout(pollBrowse,200);
     if(d && d.editable && pad && pad.zoomAt && phoneBrowse() && pad.z.s<1.8) pad.zoomAt(ev.clientX, ev.clientY, 3);
   }catch(e){toast(e.message)}
@@ -3784,8 +3992,14 @@ $("watchtype").onsubmit=async ev=>{
   });
   window.addEventListener("pointerup",()=>{mode=null});
 })();
-$("bgo").onclick=async()=>{const u=$("burl").value.trim(); if(!u)return; try{const d=await api("/api/browse/open",{method:"POST",body:browseBody({url:u})}); $("burl").value=d.url||u; try{await api("/api/browse/front",{method:"POST",body:browseBody({})});}catch{}}catch(e){toast(e.message)}};
-if($("bfront")) $("bfront").onclick=async()=>{try{await api("/api/browse/front",{method:"POST",body:browseBody({})});}catch(e){toast(e.message)}};
+$("bgo").onclick=async()=>{
+  const u=$("burl").value.trim(); if(!u)return;
+  try{
+    const d=await api("/api/browse/open",{method:"POST",timeout:20000,body:browseBody({url:u})});
+    $("burl").value=d.url||u;
+  }catch(e){toast(e.message)}
+  pollBrowse();
+};
 $("burl").addEventListener("keydown",e=>{if(e.key==="Enter"){$("bgo").click();e.preventDefault()}});
 $("bback").onclick=async()=>{
   if(window.matchMedia("(max-width:720px)").matches){

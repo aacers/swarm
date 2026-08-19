@@ -267,6 +267,39 @@ class IsolationUnit(unittest.TestCase):
         follow = html.split("function looksFollow(t){", 1)[1].split("}", 1)[0]
         self.assertNotIn("|stop|", follow)
 
+    def test_glab_slash_expands_to_lab_instruction(self):
+        self.assertEqual(
+            server.expand_glab_command("hello"),
+            "hello",
+        )
+        self.assertIn("glab-kaart", server.expand_glab_command("/glab"))
+        self.assertIn("`glab status`", server.expand_glab_command("/glab status"))
+        self.assertIn("boot --all", server.expand_glab_command("/glab boot"))
+        self.assertIn("boot --ios", server.expand_glab_command("/glab boot --ios"))
+        self.assertIn("boot --wear", server.expand_glab_command("/glab boot --wear"))
+        self.assertIn("boot --watch", server.expand_glab_command("/glab boot --watch"))
+        lab = server.expand_glab_command("/glab lab naptara")
+        self.assertIn("NU dit commando", lab)
+        self.assertIn("com.bumblly.naptara", lab)
+        self.assertIn("Niet copy lezen", lab)
+        self.assertIn("human --confirm", server.expand_glab_command("/glab human naptara"))
+        road = server.expand_glab_command("/glab lab roadlock")
+        self.assertIn("com.bumblly.roadlock", road)
+        self.assertIn("Projects/Roadlock", road)
+        proto = server.expand_glab_command("/glab protocol naptara")
+        self.assertIn("`glab protocol`", proto)
+        self.assertIn("Naptara", proto)
+        team = server.expand_glab_command("/glab team pupwatch")
+        self.assertIn("glab lab --bundle com.bumblly.pupwatch", team)
+        self.assertIn("NU dit commando", team)
+        self.assertIn("SUBMIT", server.expand_glab_command("/glab ship --submit"))
+        self.assertIn("Niet uploaden", server.expand_glab_command("/glab ship"))
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="slashpop"', html)
+        self.assertIn("const GLAB_OPTS=", html)
+        self.assertIn("function paintSlash()", html)
+        self.assertIn('placeholder="Type a message…  /glab"', html)
+
     def test_stop_clears_submit_hold_immediately(self):
         now = time.time()
         server._stopped_until.clear()
@@ -1823,34 +1856,14 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
             server._thought_from_pane('  ┃  The user is saying "klaar nu" which means ready now.'),
         )
 
-    def test_maybe_note_progress_writes_on_change_not_every_tick(self):
+    def test_maybe_note_progress_does_not_write_transcript(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "A"}}))
         started = time.time() - 30
         prog = {"waiting": True, "activity": "Writing", "line": "Editing agents_tmux.py"}
         server.maybe_note_progress("bot-a", prog, 20, last_user_at=started)
         server.maybe_note_progress("bot-a", prog, 21, last_user_at=started)
         notes = [m for m in rosterlib.load_swarm_msgs("bot-a") if m.get("meta") == "progress"]
-        self.assertEqual(len(notes), 1)
-        self.assertEqual(notes[0]["text"], "Edited agents_tmux.py")
-        path = rosterlib.agent_dir("bot-a") / "live_note.json"
-        prev = json.loads(path.read_text(encoding="utf-8"))
-        prev["at"] = time.time() - 5
-        path.write_text(json.dumps(prev), encoding="utf-8")
-        server.maybe_note_progress(
-            "bot-a",
-            {
-                "waiting": True,
-                "activity": "Reading",
-                "done": "Read 2 files",
-                "headline": "Checking TestFlight build 27",
-            },
-            40,
-            last_user_at=started,
-        )
-        notes = [m for m in rosterlib.load_swarm_msgs("bot-a") if m.get("meta") == "progress"]
-        self.assertEqual(len(notes), 2)
-        self.assertEqual(notes[-1]["text"], "Checking TestFlight build 27")
-        self.assertFalse(any(server._is_tally_pill(n["text"]) for n in notes))
+        self.assertEqual(notes, [])
 
     def test_enqueue_and_remove_queue(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "A"}}))
@@ -2122,9 +2135,28 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertTrue(server.agents_tmux.title_busy("Waiting for response… — bot-61627"))
         loop = "❯ [Loop · Ga degero na en]: check seo\n◎ 1 loop still running\n"
         self.assertFalse(server.agents_tmux.pane_busy(loop))
+        self.assertTrue(server._LOOP_RUNNING_RE.search(loop))
         rewind = loop + "Rewind to which turn?\n· (no preview)\n"
         self.assertEqual(server.agents_tmux.pane_overlay(rewind), "rewind")
         self.assertFalse(server.agents_tmux.pane_busy(rewind))
+
+    def test_tick_loops_skips_while_loop_still_running(self):
+        server._last_loops = 0.0
+        server._last_loop_fire = 0.0
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        win = {"slug": "bot-a", "tmux": "heavy-bot-a"}
+        pane = "❯ \n◎ 1 loop still running\nGrok 4.6 · always-approve"
+        with mock.patch.object(server, "load_settings", return_value={"loops_night": True}):
+            with mock.patch.object(server, "loop_quiet_hours", return_value=False):
+                with mock.patch.object(
+                    server.rosterlib, "due_swarm_loops", return_value=[("bot-a", {"id": "x", "name": "Gmail", "prompt": "check"})]
+                ):
+                    with mock.patch.object(server, "resolve_delivery", return_value=win):
+                        with mock.patch.object(server, "live_busy", return_value=False):
+                            with mock.patch.object(server.agents_tmux, "capture_pane", return_value=pane):
+                                with mock.patch.object(server, "dispatch_text") as send:
+                                    server.tick_loops()
+        send.assert_not_called()
 
     def test_pane_busy_idle_box_after_worked_for(self):
         done = (
@@ -2332,6 +2364,48 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("function browseBot()", html)
         self.assertIn("function browseBody(o)", html)
 
+    def test_browse_stays_in_app(self):
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn('"headless": True', daemon)
+        self.assertNotIn('"headless": False', daemon)
+        self.assertNotIn("bring_to_front", daemon)
+        self.assertNotIn("--window-position", daemon)
+        self.assertIn("--headless=new", daemon)
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        go = html.split('$("bgo").onclick=async()=>{', 1)[1].split('$("burl").addEventListener', 1)[0]
+        self.assertNotIn("/api/browse/front", go)
+        self.assertNotIn("/api/browse/front", html)
+        skill = (Path.home() / ".grok" / "skills" / "browser" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("gbrowse get", skill)
+        gbrowse = (Path.home() / ".grok" / "bin" / "gbrowse").read_text(encoding="utf-8")
+        self.assertIn('print("in-app")', gbrowse)
+        self.assertNotIn('req("POST", "/front"', gbrowse)
+
+    def test_browse_page_is_text_not_shot(self):
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn("_PAGE_JS", daemon)
+        self.assertIn('elif cmd == "tap":', daemon)
+        self.assertIn('elif cmd in {"read", "page"}:', daemon)
+        self.assertIn('if path in {"/read", "/page"}', daemon)
+        gbrowse = (Path.home() / ".grok" / "bin" / "gbrowse").read_text(encoding="utf-8")
+        self.assertIn("def show_page", gbrowse)
+        self.assertIn('sub.add_parser("tap")', gbrowse)
+        self.assertIn('sub.add_parser("page")', gbrowse)
+        self.assertIn('sub.add_parser("get")', gbrowse)
+        self.assertIn("fetch_page(args.url, bot=bot)", gbrowse)
+        self.assertIn('GET", "/page"', gbrowse)
+        self.assertIn('"page": True', gbrowse)
+        skill = (Path.home() / ".grok" / "skills" / "browser" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("gbrowse get", skill)
+        self.assertIn("`asc`", skill)
+        self.assertIn("etsy sales", skill)
+        self.assertIn("Verboden", skill)
+
+    def test_chat_live_term_only_while_waiting(self):
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("const term=(waiting && lastTerm&&lastTerm.length)?lastTerm:[]", html)
+        self.assertIn('if((rows[i].kind||"")==="user"){ start=i+1; break; }', html)
+
     def test_mobile_chat_can_open_browser(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn('id="chatbr"', html)
@@ -2375,10 +2449,106 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
             self.assertIn("request_shot()", block)
         self.assertIn("insert_text", typ)
         self.assertIn("disable-renderer-backgrounding", src)
+        self.assertIn('if cmd in {"health", "snap"} and page is None:', src)
         self.assertIn("want_shot", src)
         self.assertNotIn('got = call("shot"', src)
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("return 320", html)
+
+    def test_browse_open_returns_before_full_load(self):
+        src = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        openb = src.split('elif cmd == "open":', 1)[1].split('elif cmd == "click":', 1)[0]
+        self.assertIn('wait_until="commit"', openb)
+        self.assertNotIn("snap(", openb)
+        self.assertIn("request_shot()", openb)
+        self.assertIn('args.get("page")', openb)
+        self.assertIn("Service Worker", src)
+        self.assertIn("PriorityQueue", src)
+        self.assertIn('pri = 1 if cmd in {"health", "snap"} else 0', src)
+        self.assertIn("target closed", src)
+        self.assertNotIn("shutil.copytree", src)
+        self.assertIn("Network/Cookies", src)
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        go = html.split('$("bgo").onclick=async()=>{', 1)[1].split('$("burl").addEventListener', 1)[0]
+        self.assertIn("timeout:20000", go)
+        self.assertIn("pollBrowse()", go)
+        self.assertIn('"/api/browse/wake"', html)
+        self.assertIn('"wake"', src)
+        gbrowse = (Path.home() / ".grok" / "bin" / "gbrowse").read_text(encoding="utf-8")
+        self.assertIn('"chrome": True', gbrowse)
+        self.assertIn('elif args.cmd == "chrome":', gbrowse)
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn("from page_fetch import gate", daemon)
+        self.assertIn('g.get("action") != "chrome"', daemon)
+
+    def test_web_is_mcp_not_chrome(self):
+        import page_fetch
+
+        html = (
+            "<html><head><title>Hello</title></head>"
+            "<body><h1>Hi</h1><p>World page.</p>"
+            '<a href="/x">Next</a><script>var x=1</script></body></html>'
+        )
+        parser = page_fetch._Page()
+        parser.feed(html)
+        parser.close()
+        self.assertIn("Hello", "".join(parser.title_parts))
+        blob = "".join(parser.text_parts)
+        self.assertIn("World", blob)
+        self.assertNotIn("var x", blob)
+        self.assertEqual(parser.links[0][1], "/x")
+        self.assertTrue(page_fetch.api_hint("https://appstoreconnect.apple.com/login"))
+        self.assertTrue(page_fetch.api_hint("https://www.etsy.com/your/shops"))
+        self.assertTrue(page_fetch.api_hint("https://gumroad.com/dashboard"))
+        self.assertTrue(page_fetch.api_hint("https://api.searchads.apple.com/"))
+        self.assertIsNone(page_fetch.api_hint("https://play.google.com/store/apps"))
+        self.assertEqual(page_fetch.gate("https://appstoreconnect.apple.com/apps")["action"], "api")
+        self.assertEqual(page_fetch.gate("https://accounts.google.com/")["action"], "chrome")
+        self.assertEqual(page_fetch.gate("https://example.com/")["action"], "fetch")
+        page_fetch.save_cookies(
+            "unit-gate",
+            [{"name": "sid", "value": "1", "domain": ".example.com", "path": "/"}],
+        )
+        self.assertIn("sid=1", page_fetch.cookie_header("https://www.example.com/", "unit-gate").get("Cookie", ""))
+        try:
+            page_fetch.cookie_path("unit-gate").unlink()
+        except Exception:
+            pass
+        self.assertEqual(page_fetch.extract_urls("see https://example.com/a"), ["https://example.com/a"])
+        self.assertEqual(page_fetch.extract_urls("open nu.nl"), ["https://nu.nl"])
+        self.assertEqual(page_fetch.extract_urls("ga naar over ons"), [])
+        self.assertEqual(
+            page_fetch.best_link(
+                {
+                    "controls": [
+                        {"text": "Home", "href": "https://x.nl/"},
+                        {"text": "Over ons", "href": "https://x.nl/over/"},
+                        {"text": "Meer over klimaattechniek", "href": "https://x.nl/diensten/"},
+                    ]
+                },
+                "over ons",
+            ),
+            "https://x.nl/over/",
+        )
+        self.assertIn("def follow_page(", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertIn("def gate(", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertIn("def handle_web(", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertEqual(page_fetch.extract_urls("lees www.nu.nl"), ["https://nu.nl"])
+        self.assertIn("api.appstoreconnect.apple.com", page_fetch.extract_urls("open app store connect")[0])
+        self.assertIn("preview_chrome", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertEqual(page_fetch.attach_pages("ok thanks"), "ok thanks")
+        self.assertNotIn("[:5000]", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertIn("Do not paste the page in chat", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        self.assertIn("last-page.txt", (ROOT / "page_fetch.py").read_text(encoding="utf-8"))
+        src = (ROOT / "server.py").read_text(encoding="utf-8")
+        self.assertIn("def deliver_user(", src)
+        self.assertIn("page_fetch.handle_web", src)
+        self.assertIn("deliver_text(win, text, submit)", src)
+        self.assertNotIn("deliver_text(win, payload, submit)", src)
+        self.assertIn("pane_gui_loop", src)
+        self.assertIn('"via": "web-steer"', src)
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn('if path == "/fetch":', daemon)
 
     def test_browse_authcopy_and_swarm_slug(self):
         daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
@@ -2621,6 +2791,11 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
 
     def test_frontend_loads_chat_by_slug(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("if(!showBusy(w)) return 1e6+rest", html)
+        self.assertIn("return started>0?-started:rest", html)
+        self.assertIn("steerGone[chatKey(current)]=true", html)
+        self.assertIn("function parkDraft()", html)
+        self.assertIn("loadDraft(want)", html)
         self.assertIn("function chatKey(w)", html)
         self.assertIn("function sameChat(w, want)", html)
         self.assertIn("function termBodyHtml(term)", html)
@@ -2633,8 +2808,17 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("align-items:stretch", html)
         self.assertIn("function paintSticky(", html)
         self.assertIn("function stickyPills(", html)
-        self.assertIn("#chathist{display:flex;flex-direction:column;flex:1 0 auto;min-height:100%", html)
-        self.assertIn("if(waiting || pinNext||stickBottom) pinChat(true)", html)
+        self.assertIn("function stickyClip(", html)
+        self.assertIn("[web already fetched", html)
+        self.assertIn("-webkit-line-clamp:3", html)
+        self.assertIn("max-height:28vh", html)
+        self.assertIn("function sameQ(a,b)", html)
+        self.assertIn("if(lastSticky.length>1 && sameQ(lastSticky[0], lastSticky[1])) lastSticky=lastSticky.slice(0,1)", html)
+        self.assertIn("#chathist{display:flex;flex-direction:column;width:100%}", html)
+        self.assertIn("#chatlog.termish #chathist{flex:0 0 auto;min-height:0}", html)
+        self.assertIn("if(pinNext||stickBottom) pinChat(true)", html)
+        self.assertIn("const shown=term.length?historyOffTerm(foldTurns(msgs||[], false), term, pills):foldTurns(msgs||[], waiting)", html)
+        self.assertIn("chatTimer=setTimeout(loop, fast?250:900)", html)
         self.assertIn("function termTailUsers(", html)
         self.assertIn("lastSticky=out.slice(0,2)", html)
         self.assertIn("function collapsePills(", html)
@@ -2652,11 +2836,40 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("Never moves the Mac mouse", src)
         self.assertIn("def boot_android(", src)
         self.assertIn("AVD_NAME = \"SwarmLab\"", src)
+        self.assertIn("WEAR_AVD_NAME = \"SwarmWear\"", src)
+        self.assertIn("def ensure_wear_avd(", src)
         self.assertIn("def protocol(", src)
         self.assertIn("def _android_running(", src)
         self.assertIn("def _ios_crash_lines(", src)
         self.assertIn("def _run_repo_tests(", src)
         self.assertIn("def ship(", src)
+        self.assertIn("def team(", src)
+        self.assertIn("def lab(", src)
+        self.assertIn("def catalog_compare(", src)
+        self.assertIn("def resolve_binaries(", src)
+        self.assertIn("def first10_from_texts(", src)
+        self.assertIn("def journey_gates(", src)
+        self.assertIn("def human_confirm(", src)
+        self.assertIn("JOURNEY_PHASES", src)
+        self.assertIn("def boot_watch(", src)
+        self.assertIn("def explore(", src)
+        self.assertIn("_shutdown_udid", src)
+        self.assertIn("finally:", (ROOT / "device_lab.py").read_text(encoding="utf-8"))
+        self.assertIn("def delight_report(", src)
+        self.assertIn("WATCH_NAME = \"Swarm Watch\"", src)
+        self.assertIn("def walk_features(", src)
+        self.assertIn("def quality(", src)
+        self.assertIn("def _tiny_targets(", src)
+        self.assertTrue((ROOT / "lab_flows" / "smoke.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "camera.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "iap.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "rotate.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "background.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "interrupt.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "apps" / "naptara.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "apps" / "pupwatch.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "apps" / "docmint.yaml").is_file())
+        self.assertTrue((ROOT / "lab_flows" / "apps" / "roadlock.yaml").is_file())
         self.assertIn('if (confirm or "").strip().upper() != "SUBMIT"', src)
         self.assertIn("def audit(", src)
         self.assertIn("def sweep(", src)
@@ -2673,6 +2886,74 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertTrue(rosterlib.wants_lab("Apps bot"))
         self.assertTrue(rosterlib.wants_lab("Naptara"))
         self.assertFalse(rosterlib.wants_lab("Degero"))
+        self.assertEqual(device_lab.app_slug("com.bumblly.naptara", ""), "naptara")
+        self.assertTrue(device_lab.needles_hit("Baby Station Naptara", ["naptara", "foo"]))
+        f10 = device_lab.first10_from_texts("com.bumblly.naptara", ["Naptara", "Baby Station", "Start"])
+        self.assertTrue(all(g["ok"] for g in f10 if g["id"] == "first10-job"))
+        bad10 = device_lab.first10_from_texts("com.bumblly.naptara", ["Unlock Pro", "Buy", "€", "Lifetime"])
+        self.assertTrue(any(g["id"] == "first10-paywall" and not g["ok"] for g in bad10))
+        pw = device_lab.paywall_from_texts(["Unlock Lifetime Pro", "Restore Purchases", "€7.99"])
+        self.assertTrue(any(g["id"] == "paywall-restore" and g["ok"] for g in pw))
+        sub = device_lab.paywall_from_texts(["Monthly", "Subscribe", "Restore"])
+        self.assertTrue(any(g["id"] == "paywall-lifetime" and not g["ok"] for g in sub))
+        ipa = Path(self.tmp.name) / "Naptara.ipa"
+        ipa.write_bytes(b"ipa")
+        found = device_lab.resolve_binaries("com.bumblly.naptara", str(self.tmp.name), ios_path=str(ipa))
+        self.assertTrue(found["ios"].endswith("Naptara.ipa"))
+        root = Path(self.tmp.name) / "loc"
+        (root / "res" / "values").mkdir(parents=True)
+        (root / "res" / "values-nl").mkdir()
+        (root / "res" / "values" / "strings.xml").write_text(
+            '<resources><string name="long_one">Find the other phone please now</string></resources>',
+            encoding="utf-8",
+        )
+        (root / "res" / "values-nl" / "strings.xml").write_text(
+            '<resources><string name="long_one">Find the other phone please now</string></resources>',
+            encoding="utf-8",
+        )
+        cat = device_lab.catalog_compare(str(root), [], "nl")
+        self.assertTrue(any(g["id"] == "copy-untranslated" and not g["ok"] for g in cat))
+        old_lab = device_lab.LAB_DIR
+        device_lab.LAB_DIR = Path(self.tmp.name) / "labdir"
+        device_lab.LAB_DIR.mkdir()
+        try:
+            okh = device_lab.human_confirm("com.bumblly.naptara", "done")
+            self.assertTrue(okh.get("ok"))
+            fresh, _ = device_lab.human_fresh("com.bumblly.naptara")
+            self.assertTrue(fresh)
+        finally:
+            device_lab.LAB_DIR = old_lab
+        self.assertTrue(device_lab._looks_watch_app("com.bumblly.pupwatch", ""))
+        self.assertFalse(device_lab._looks_watch_app("com.bumblly.naptara", ""))
+        self.assertTrue(device_lab.skip_tap("Buy"))
+        self.assertFalse(device_lab.skip_tap("Start"))
+        flags = device_lab.copy_flags(["Hello", "Lorem ipsum", "TODO now", "Title…"])
+        kinds = {f["type"] for f in flags}
+        self.assertIn("placeholder-copy", kinds)
+        self.assertIn("clipped", kinds)
+        d = device_lab.delight_report(["Start camera"], [{"class": "button", "text": "Start"}])
+        self.assertGreaterEqual(d["score"], 8)
+        d2 = device_lab.delight_report([], [])
+        self.assertLessEqual(d2["score"], 5)
+        self.assertTrue(d2["empty"])
+        vo = device_lab.vo_issues([{"class": "XCUIElementTypeButton", "text": "", "id": "", "bounds": "[0,0][40,40]"}])
+        self.assertTrue(any(x["type"] == "vo-unlabeled" for x in vo))
+        fake = Path(self.tmp.name) / "app-debug.apk"
+        fake.write_bytes(b"pk")
+        apk = device_lab.inspect_binary(str(fake))
+        self.assertFalse(apk.get("store"))
+        self.assertTrue(apk.get("debug"))
+        ipa = device_lab.inspect_binary("/tmp/does-not-exist.ipa")
+        self.assertFalse(ipa.get("ok"))
+        card = device_lab.human_card("com.bumblly.naptara", camera=True, watch=False)
+        self.assertIn("Fysieke ronde", card)
+        self.assertIn("Camera", card)
+        md = device_lab.lab_markdown({"bundle": "x", "green": True, "score": 1, "max": 1, "gates": [{"id": "lab", "ok": True, "detail": "up", "blocker": True}], "blockers": []})
+        self.assertIn("Lab report", md)
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("--wear", html)
+        self.assertIn("--watch", html)
+        self.assertIn('id:"lab"', html)
 
 
 class IsolationLive(unittest.TestCase):
