@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.61"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.63"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -74,7 +74,8 @@ html[data-theme=light] #brandacts #fab:hover{background:linear-gradient(180deg,#
 #watch{display:none;position:fixed;right:18px;top:84px;width:420px;height:280px;min-width:240px;min-height:160px;max-width:calc(100% - 36px);max-height:calc(100% - 160px);background:#111;border-radius:16px;overflow:hidden;z-index:36;box-shadow:var(--shadow);border:1px solid var(--line);resize:none}
 #watch.on{display:flex;flex-direction:column}
 #watch.big{left:12px;right:12px;top:12px;bottom:12px;width:auto;height:auto;max-width:none;max-height:none}
-#watchimg{flex:1;width:100%;min-height:0;object-fit:contain;background:#111;display:block;cursor:crosshair;touch-action:none}
+#watchstage{flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#111}
+#watchimg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#111;display:block;cursor:crosshair;touch-action:none;transform-origin:0 0;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .watch-bar{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:10px 12px;background:#161a24;color:#fff;font-size:13px;font-weight:700}
 .watch-bar span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .watch-bar button{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:8px;min-width:36px;height:32px;font-weight:800}
@@ -161,14 +162,6 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 .loopbtn .loopico{font-size:13px;line-height:1}
 .loopbtn .loopn{font-variant-numeric:tabular-nums}
 #mrename{display:none;width:100%;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 10px;font-weight:800;font-size:18px}
-#findbar{display:none;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--side)}
-#findbar.on{display:flex}
-#findq{flex:1;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 10px;font-size:15px}
-#findn{font-size:11px;color:var(--muted);min-width:3.2em;text-align:right}
-#findbar button{border:0;background:var(--row);border-radius:8px;min-width:28px;height:28px;font-weight:800}
-.msg.nomatch{opacity:.18;max-height:2.4em;overflow:hidden}
-.msg.findon .bubble{box-shadow:0 0 0 2px #eab308}
-.bubble mark.hit{background:#eab308;color:#14161c;border-radius:3px;padding:0 1px}
 #mico{width:48px;height:48px;border-radius:16px;object-fit:cover;box-shadow:var(--shadow)}
 #schema{display:none;flex-direction:column;align-items:stretch;gap:2px;margin-top:6px;padding:0;border:0;background:transparent;min-height:0;max-width:min(22em,100%)}
 #schema.on{display:flex}
@@ -349,7 +342,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 #alist,#qlist{display:none}
 #steer{display:none}
 #bcomposer{display:flex;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);background:var(--side);min-width:0;flex-shrink:0}
-#bcomposer input{flex:1 1 0;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:16px;padding:12px 14px;font-size:16px;outline:none}
+#bcomposer input{flex:1 1 0;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:16px;padding:12px 14px;font-size:16px;outline:none;-webkit-user-select:text;user-select:text}
 #bcomposer .send{flex:0 0 auto;border:0;border-radius:14px;background:var(--accent);color:#eef0f8;height:44px;min-width:48px;padding:0 14px;font-weight:800}
 .talkbtn{border:0;border-radius:14px;background:var(--boss);color:#eef0f8;padding:0 16px;height:46px;font-weight:800;display:inline-flex;align-items:center;gap:8px}
 .talkbtn span{font-size:16px}
@@ -377,8 +370,10 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 #vclose{margin-top:18px;border:0;border-radius:14px;padding:12px 18px;background:#fff;color:#14161c;font-weight:800}
 #bar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--side);min-width:0}
 #bar input{flex:1 1 0;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px}
-#bstage{flex:1;position:relative;background:#111;min-height:0;outline:none}
-#bstage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#bstage{flex:1;position:relative;background:#111;min-height:0;outline:none;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#bstage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform-origin:0 0;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#bzoombar{display:none;position:absolute;right:10px;bottom:10px;z-index:3;flex-direction:column;gap:6px}
+#bzoombar button{width:44px;height:44px;border:0;border-radius:12px;background:rgba(20,22,30,.78);color:#fff;font-size:22px;font-weight:800;line-height:1}
 #mem,#setbox,#asetmem{flex:1;min-width:0;min-height:0;margin:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px;resize:none;outline:none;box-sizing:border-box}
 .perm{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;min-height:44px;border-bottom:1px solid var(--line)}
 .perm>div{flex:1;min-width:0}
@@ -449,7 +444,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   #mhead .mrow{gap:8px}
   .mheadx{gap:8px;padding:8px 10px;min-height:56px}
   #schema{margin-top:5px;padding:0}
-  #mhead #findbtn,#mhead #botset,#mhead #chatbr,.mheadx .iconbtn,#backm,.mback{width:40px;height:40px;min-width:40px}
+  #mhead #botset,#mhead #chatbr,.mheadx .iconbtn,#backm,.mback{width:40px;height:40px;min-width:40px}
   #mhead #talk{display:none}
   #mico-wrap.av{width:36px;height:36px;flex-basis:36px}
   #mico{width:36px;height:36px;border-radius:12px}
@@ -488,6 +483,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   #hideterm{padding:0 12px;height:40px;font-size:14px}
   #bcomposer{padding:8px 10px 10px !important}
   #bcomposer input{flex:1 1 0;min-width:0}
+  #bzoombar{display:flex}
 }
 </style></head>
 <body>
@@ -516,13 +512,11 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
         <div class="av" id="mico-wrap" style="display:none"><img id="mico" alt=""/><span class="dots" id="mdots"><i></i><i></i><i></i></span></div>
         <div class="grow"><div class="trow"><div class="t" id="mtitle" title="Tap to rename">Choose a bot</div><input id="mrename" maxlength="40" autocomplete="off" spellcheck="false"/><button type="button" class="loopbtn" id="loopbtn" aria-expanded="false" title="Loops" hidden><span class="loopico">↻</span><span class="loopn" id="loopcount">0</span></button></div><div class="s" id="msub">Pick a bot on the left</div><div id="schema"></div></div>
         <span id="musage" title="Weekly usage"></span>
-        <button class="iconbtn" id="findbtn" title="Search chat" aria-label="Search">⌕</button>
         <button class="iconbtn" id="chatbr" title="Browser" aria-label="Browser" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/></svg></button>
         <button class="iconbtn" id="botset" title="Bot settings">⚙</button>
         <button class="talkbtn" id="talk" title="Huddle" aria-label="Huddle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7h11l-3-3"/><path d="M16 17H5l3 3"/></svg><span class="talklab">Huddle</span></button>
         </div>
       </div>
-      <div id="findbar"><input id="findq" placeholder="Search this chat…"/><span id="findn"></span><button type="button" id="findprev" title="previous">‹</button><button type="button" id="findnext" title="next">›</button><button type="button" id="findx" title="close">×</button></div>
       <div id="chat">
         <div id="chatlog"><div class="empty" id="empty"><h2>Swarm</h2><div>Tap <b>+ Bot</b> (top) to start.<br>Then type below.<br>On iPhone: swipe to close.</div></div></div>
       </div>
@@ -545,8 +539,8 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
     </section>
     <section class="pane" id="p-browser" style="display:none;flex-direction:column;height:100%;min-height:0;min-width:0">
       <div id="bar"><button class="iconbtn" id="bback" title="Back">‹</button><input id="burl" placeholder="https://google.com"/><button class="iconbtn" id="bgo">→</button></div>
-      <div class="st" id="bstatus" style="padding:6px 12px;color:var(--muted)">Follow along: when a bot uses the browser, you see it here live.</div>
-      <div id="bstage" style="flex:1;min-height:0;background:#111"><img id="bframe" alt="browser" style="background:#222"/></div>
+      <div class="st" id="bstatus" style="padding:6px 12px;color:var(--muted)">Pinch to zoom · hold to select · type below</div>
+      <div id="bstage" style="flex:1;min-height:0;background:#111"><img id="bframe" alt="browser" style="background:#222"/><div id="bzoombar"><button type="button" id="bzin" aria-label="Zoom in">+</button><button type="button" id="bzout" aria-label="Zoom out">−</button></div></div>
       <form id="bcomposer">
         <input id="btype" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="Type here — types into the page"/>
         <button type="submit" class="send">↵</button>
@@ -631,7 +625,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   <div id="vsub"></div>
   <button id="vclose">Stop voice</button>
 </div></div>
-<div id="watch"><div class="watch-bar" id="watchbar"><span id="watchlab">Browser</span><button type="button" id="watchbig" title="Enlarge">▣</button><button type="button" id="watchx">×</button></div><img id="watchimg" alt="browser live" tabindex="0"/><div id="watchhint">Tap or click to click · scroll · type below or on the keyboard</div><form id="watchtype"><input id="watchin" placeholder="Type into the page…" enterkeyhint="go" autocomplete="off" autocapitalize="off"/><button type="submit">↵</button></form><div class="grip" id="watchgrip"></div></div>
+<div id="watch"><div class="watch-bar" id="watchbar"><span id="watchlab">Browser</span><button type="button" id="watchbig" title="Enlarge">▣</button><button type="button" id="watchx">×</button></div><div id="watchstage"><img id="watchimg" alt="browser live" tabindex="0"/></div><div id="watchhint">Pinch to zoom · hold to select · type below</div><form id="watchtype"><input id="watchin" placeholder="Type into the page…" enterkeyhint="go" autocomplete="off" autocapitalize="off"/><button type="submit">↵</button></form><div class="grip" id="watchgrip"></div></div>
 <div id="sheet"><div class="box"><strong id="sheettitle">Huddle</strong><div id="sheetbody"></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
@@ -670,7 +664,7 @@ let windows=[], roster={ceo:"",agents:[]}, current=null, sending=false, chatTime
 let providers={grok:true,claude:true,codex:true};
 let modelsCatalog={grok:[["grok-4.6","4.6"],["grok-4.5","4.5"]],claude:[["sonnet","Sonnet"],["opus","Opus"],["haiku","Haiku"]],codex:[["","Default"],["gpt-5.4","GPT-5.4"]]};
 let chatToken=0;
-let watchMutedAt=0, lastBrowseAt=0, lastShotN=0, shotBusy=false, activeTab="chat";
+let watchMutedAt=0, lastBrowseAt=0, lastShotN=0, shotBusy=false, activeTab="chat", browseFromChat=null;
 const pending={};
 const lastSubmit={};
 const $=id=>document.getElementById(id);
@@ -771,13 +765,23 @@ function isHome(w){
   return false;
 }
 function aiOf(w){
-  const a=((metaOf(w)||{}).ai||w.ai||"grok").toLowerCase();
-  return ["claude","codex"].includes(a)?a:"grok";
+  const a=((metaOf(w)||{}).ai||w.ai||"grok").toLowerCase().replace(/[^a-z0-9_-]/g,"");
+  return a||"grok";
 }
-function aiLabel(a){ return a==="claude"?"Claude":a==="codex"?"ChatGPT":"Grok"; }
+function aiLabel(a){
+  a=String(a||"grok").toLowerCase();
+  if(a==="claude") return "Claude";
+  if(a==="codex") return "ChatGPT";
+  if(a==="grok") return "Grok";
+  if(a==="gemini") return "Gemini";
+  if(a==="opencode") return "OpenCode";
+  if(a==="cursor-agent") return "Cursor";
+  return a.replace(/(^|[-_])([a-z])/g,(_,p,c)=> (p?" ":"")+c.toUpperCase());
+}
 function aiMark(w){
   const a=aiOf(w);
-  return `<img class="ai-logo" src="icons/ai-${a}.svg" alt="${esc(aiLabel(a))}" title="${esc(aiLabel(a))}"/>`;
+  const file=["claude","codex","grok"].includes(a)?a:"grok";
+  return `<img class="ai-logo" src="icons/ai-${file}.svg" alt="${esc(aiLabel(a))}" title="${esc(aiLabel(a))}"/>`;
 }
 function isBusy(w){
   if(!w) return false;
@@ -1056,7 +1060,13 @@ function paintSchema(w){
   el.classList.toggle("open", loopOpen);
   el.innerHTML=`<div class="looplist"><div class="loopinner">${loops.map(L=>`<button type="button" class="looprow" data-loop="${esc(L.id||"")}" title="${esc(L.prompt||L.name||"Loop")}"><span class="loopico">↻</span><span class="looptitle">${esc(L.name||"Loop")}</span><span class="loopevery">${esc(L.every||"")}</span></button>`).join("")}</div></div>`;
 }
+function paintChatBr(w){
+  const btn=$("chatbr");
+  if(!btn) return;
+  btn.hidden=!(w && settings.browser!==false);
+}
 function paintHeader(w){
+  paintChatBr(w);
   if(!w){ $("mtitle").textContent="Choose a bot"; $("msub").textContent="Pick a bot on the left"; $("mico-wrap").style.display="none"; paintSchema(null); paintStop(); return; }
   $("mico-wrap").style.display="block";
   $("mico-wrap").classList.toggle("busy", showBusy(w));
@@ -1251,6 +1261,7 @@ async function refresh(){
   }catch{$("host").textContent="offline"}
 }
 function goHome(){
+  browseFromChat=null;
   document.getElementById("shell").classList.remove("chat","page","browse","full");
   if($("watch")) $("watch").classList.remove("on","big");
   tab("chat", true);
@@ -1272,7 +1283,7 @@ function tab(name, stayHome){
   }
   clearInterval(bTimer); bTimer=null;
   if(name==="browser"){ startBrowse(); if($("watch")) $("watch").classList.remove("on","big"); }
-  else armBrowsePoll();
+  else { armBrowsePoll(); if(name==="chat") pollBrowse(); }
   if(name==="mem") loadMem();
   if(name==="set") loadSet();
 }
@@ -1648,7 +1659,6 @@ function renderBubbles(msgs, extraWait, id){
   paintWait();
   if(pinNext||stickBottom) pinChat(true);
   else paintJump();
-  applyFind(false);
 }
 let chatCopySrc=[];
 async function copyText(text){
@@ -2729,6 +2739,18 @@ if($("loopbtn")) $("loopbtn").onclick=ev=>{
 if($("schema")) $("schema").onclick=ev=>{
   if(ev.target.closest("[data-loop]") && $("botset")) $("botset").click();
 };
+function paintAiPicks(on){
+  const el=$("asetai"); if(!el) return;
+  const core=["grok","claude","codex"];
+  const extra=Object.keys(providers||{}).filter(k=>!core.includes(k)).sort();
+  const keys=core.concat(extra);
+  el.innerHTML=keys.map(k=>{
+    const off=providers[k]===false;
+    const lab=k==="codex"?"ChatGPT":aiLabel(k);
+    const sub=k==="grok"?"default":k==="codex"?"Codex":"";
+    return `<button type="button" data-ai="${k}"${off?" disabled":""} class="${k===on?"on":""}">${esc(lab)}${sub?`<span class="sub">${esc(sub)}</span>`:""}</button>`;
+  }).join("");
+}
 $("botset").onclick=async()=>{
   if(!current){toast("pick a bot first");return}
   const slug=slugOf(current);
@@ -2738,6 +2760,7 @@ $("botset").onclick=async()=>{
   $("asetceo").classList.toggle("on", !!isCeo(current));
   if($("asethome")) $("asethome").classList.toggle("on", !!isHome(current));
   const ai=aiOf(current);
+  paintAiPicks(ai);
   $("asetai").querySelectorAll("button").forEach(b=>{
     b.classList.toggle("on", b.dataset.ai===ai);
     b.disabled = providers[b.dataset.ai]===false;
@@ -2883,46 +2906,6 @@ if($("mrename")){
   });
   $("mrename").addEventListener("blur",()=>setTimeout(()=>finishRename(true),80));
 }
-let findHits=[], findI=0;
-function applyFind(scroll){
-  const bar=$("findbar"), qel=$("findq"), nel=$("findn");
-  const el=chatLog();
-  if(!el) return;
-  const q=((qel&&qel.value)||"").trim().toLowerCase();
-  findHits=[];
-  el.querySelectorAll(".msg").forEach(n=>{
-    n.classList.remove("nomatch","findon");
-    const hit=!q || (n.textContent||"").toLowerCase().indexOf(q)>=0;
-    if(q) n.classList.toggle("nomatch", !hit);
-    if(hit && q) findHits.push(n);
-  });
-  if(nel) nel.textContent=q?(findHits.length?((Math.min(findI,findHits.length-1)+1)+"/"+findHits.length):"0"):"";
-  if(scroll && findHits.length){
-    findI=((findI%findHits.length)+findHits.length)%findHits.length;
-    findHits.forEach((n,i)=>n.classList.toggle("findon", i===findI));
-    findHits[findI].scrollIntoView({block:"center",behavior:"smooth"});
-  }
-}
-function jumpFind(dir){
-  if(!findHits.length){ applyFind(true); if(!findHits.length) return; }
-  findI+=dir;
-  applyFind(true);
-}
-if($("findbtn")) $("findbtn").onclick=()=>{
-  if(!current){toast("pick a bot first");return}
-  const bar=$("findbar");
-  const on=bar.classList.toggle("on");
-  if(on){ $("findq").focus(); applyFind(true); }
-  else { $("findq").value=""; applyFind(false); }
-};
-if($("findq")) $("findq").addEventListener("input",()=>{ findI=0; applyFind(true); });
-if($("findq")) $("findq").addEventListener("keydown",ev=>{
-  if(ev.key==="Enter"){ ev.preventDefault(); jumpFind(ev.shiftKey?-1:1); }
-  if(ev.key==="Escape"){ $("findbar").classList.remove("on"); $("findq").value=""; applyFind(false); }
-});
-if($("findprev")) $("findprev").onclick=()=>jumpFind(-1);
-if($("findnext")) $("findnext").onclick=()=>jumpFind(1);
-if($("findx")) $("findx").onclick=()=>{ $("findbar").classList.remove("on"); $("findq").value=""; applyFind(false); };
 let delArmed=0;
 if($("asetdel")) $("asetdel").onclick=async()=>{
   if(!current) return;
@@ -3074,13 +3057,15 @@ function paintBrowse(d){
   if(st){
     if(d.busy) st.textContent="Bot busy: "+(d.cmd||"browser")+" · "+(d.title||url||"");
     else if(url && url!=="about:blank") st.textContent=d.title||url;
-    else st.textContent="Follow along: when a bot uses the browser, you see it here live.";
+    else st.textContent="Pinch to zoom · hold to select · type below";
   }
   const at=Number(d.at||0);
   if(at) lastBrowseAt=at;
   const muted=watchMutedAt && at && at<=watchMutedAt;
   const inChat=!!(current && document.getElementById("shell").classList.contains("chat"));
-  const showCard=inChat && live && !self && !muted && settings.browser!==false && botIsBrowsing(current);
+  const hasPage=!!(url && url!=="about:blank" && !self);
+  const showCard=inChat && hasPage && !muted && settings.browser!==false;
+  if($("chatbr")) $("chatbr").classList.toggle("live", !!(hasPage && (d.busy || live)));
   const card=$("browsecard");
   const wasCard=browseCardOn();
   if(card){
@@ -3098,6 +3083,7 @@ function paintBrowse(d){
   if(wasCard!==browseCardOn() || (watch&&watch.classList.contains("on"))) armBrowsePoll();
 }
 function openBrowseView(){
+  watchMutedAt=0;
   const watch=$("watch"); if(!watch) return;
   watch.classList.add("on");
   if(window.matchMedia("(max-width:720px)").matches) watch.classList.add("big");
@@ -3105,6 +3091,12 @@ function openBrowseView(){
   pollBrowse();
   armBrowsePoll();
   armBrowseType();
+}
+function openChatBrowser(){
+  if(settings.browser===false){ toast("browser is off"); return; }
+  watchMutedAt=0;
+  browseFromChat=current?{id:current.id, slug:slugOf(current)}:null;
+  tab("browser");
 }
 function closeBrowseView(){
   watchMutedAt=lastBrowseAt|| (Date.now()/1000);
@@ -3145,6 +3137,151 @@ function shotPoint(img, ev){
   if(nx<0||ny<0||nx>1||ny>1) return null;
   return {nx, ny};
 }
+function phoneBrowse(){ return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent); }
+function bindBrowsePad(stage, img){
+  if(!stage || !img || stage.dataset.zoomBound) return;
+  stage.dataset.zoomBound="1";
+  const z={s:1,x:0,y:0};
+  let mode=null, t0=null, last=null, pinch0=null, holdT=0, selecting=false, selectDown=false, skip=false;
+  let lastTap=0, lastTapX=0, lastTapY=0;
+  function apply(){
+    img.style.transformOrigin="0 0";
+    img.style.transform="translate("+z.x+"px,"+z.y+"px) scale("+z.s+")";
+  }
+  function clamp(){
+    const w0=stage.clientWidth, h0=stage.clientHeight;
+    if(z.s<1.02){ z.s=1; z.x=0; z.y=0; return; }
+    z.s=Math.min(5, Math.max(1, z.s));
+    z.x=Math.min(0, Math.max(w0-w0*z.s, z.x));
+    z.y=Math.min(0, Math.max(h0-h0*z.s, z.y));
+  }
+  function zoomAt(cx, cy, s){
+    const r=stage.getBoundingClientRect();
+    const lx=cx-r.left, ly=cy-r.top;
+    const s0=z.s||1, x0=z.x, y0=z.y;
+    z.s=Math.min(5, Math.max(1, s));
+    z.x=lx-(lx-x0)*(z.s/s0);
+    z.y=ly-(ly-y0)*(z.s/s0);
+    clamp(); apply();
+  }
+  function reset(){ z.s=1; z.x=0; z.y=0; apply(); }
+  function bump(dir, cx, cy){
+    const r=stage.getBoundingClientRect();
+    zoomAt(cx!=null?cx:r.left+r.width/2, cy!=null?cy:r.top+r.height/2, z.s*(dir>0?1.45:1/1.45));
+  }
+  stage._zoom={z, apply, clamp, zoomAt, reset, bump};
+  async function sendMouse(action, ev){
+    const p=shotPoint(img, ev); if(!p) return null;
+    return await api("/api/browse/mouse",{method:"POST",body:browseBody({action, nx:p.nx, ny:p.ny})});
+  }
+  async function copySel(d){
+    const sel=String(d&&d.selected||"").trim();
+    if(!sel) return;
+    try{ await navigator.clipboard.writeText(sel); toast("copied"); }
+    catch{ toast(sel.slice(0,80)); }
+  }
+  stage.addEventListener("touchstart",ev=>{
+    if(ev.touches.length>=2){
+      ev.preventDefault();
+      clearTimeout(holdT); holdT=0;
+      skip=true; selecting=false; selectDown=false;
+      const a=ev.touches[0], b=ev.touches[1];
+      pinch0={d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1,s:z.s,x:z.x,y:z.y,mx:(a.clientX+b.clientX)/2,my:(a.clientY+b.clientY)/2};
+      mode="pinch";
+      return;
+    }
+    if(ev.touches.length!==1) return;
+    const t=ev.touches[0];
+    t0=last={x:t.clientX,y:t.clientY,at:Date.now()};
+    skip=false; selecting=false; selectDown=false;
+    mode=z.s>1.05?"pan":"maybe";
+    holdT=setTimeout(()=>{ holdT=0; selecting=true; skip=true; mode="select"; }, 420);
+  },{passive:false});
+  stage.addEventListener("touchmove",ev=>{
+    if(mode==="pinch" && ev.touches.length>=2 && pinch0){
+      ev.preventDefault();
+      const a=ev.touches[0], b=ev.touches[1];
+      const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1;
+      const mx=(a.clientX+b.clientX)/2, my=(a.clientY+b.clientY)/2;
+      const r=stage.getBoundingClientRect();
+      const lx=pinch0.mx-r.left, ly=pinch0.my-r.top;
+      const ns=Math.min(5, Math.max(1, pinch0.s*(d/Math.max(8,pinch0.d))));
+      z.s=ns;
+      z.x=lx-(lx-pinch0.x)*(ns/pinch0.s)+(mx-pinch0.mx);
+      z.y=ly-(ly-pinch0.y)*(ns/pinch0.s)+(my-pinch0.my);
+      pinch0={d,s:ns,x:z.x,y:z.y,mx,my};
+      clamp(); apply();
+      return;
+    }
+    const t=ev.touches[0]; if(!t||!t0) return;
+    const dx=t.clientX-t0.x, dy=t.clientY-t0.y;
+    if(Math.abs(dx)>10||Math.abs(dy)>10){ if(holdT){ clearTimeout(holdT); holdT=0; } }
+    if(selecting){
+      ev.preventDefault();
+      skip=true;
+      const evl={clientX:t.clientX,clientY:t.clientY};
+      if(!selectDown){
+        selectDown=true;
+        sendMouse("down", {clientX:t0.x,clientY:t0.y}).catch(()=>{});
+      }
+      if(last && Date.now()-last.at<32) return;
+      last={x:t.clientX,y:t.clientY,at:Date.now()};
+      sendMouse("move", evl).catch(()=>{});
+      return;
+    }
+    if(z.s>1.05){
+      ev.preventDefault();
+      skip=true;
+      z.x+=t.clientX-last.x;
+      z.y+=t.clientY-last.y;
+      last={x:t.clientX,y:t.clientY,at:Date.now()};
+      clamp(); apply();
+      return;
+    }
+    if(Math.abs(dx)<12 && Math.abs(dy)<12) return;
+    ev.preventDefault();
+    skip=true;
+    browseScroll(img,{deltaY:-(t.clientY-last.y)*1.6,deltaX:-(t.clientX-last.x)*1.6,clientX:t.clientX,clientY:t.clientY});
+    last={x:t.clientX,y:t.clientY,at:Date.now()};
+  },{passive:false});
+  stage.addEventListener("touchend",async ev=>{
+    if(holdT){ clearTimeout(holdT); holdT=0; }
+    watchSkipClick=true;
+    if(selecting){
+      const t=ev.changedTouches[0]||t0;
+      const evl=t?{clientX:t.clientX,clientY:t.clientY}:{clientX:t0.x,clientY:t0.y};
+      try{
+        if(!selectDown){
+          const d=await sendMouse("dbl", evl);
+          await copySel(d);
+        }else{
+          const d=await sendMouse("up", evl);
+          await copySel(d);
+        }
+      }catch(e){ toast(e.message); }
+      setTimeout(pollBrowse,200);
+      selecting=false; selectDown=false; mode=null; pinch0=null;
+      return;
+    }
+    if(mode==="pinch"){
+      if(ev.touches.length===0){ mode=null; pinch0=null; }
+      return;
+    }
+    if(skip || ev.touches.length){ mode=null; return; }
+    const t=ev.changedTouches[0]; if(!t||!t0){ mode=null; return; }
+    if(Math.abs(t.clientX-t0.x)>10 || Math.abs(t.clientY-t0.y)>10){ mode=null; return; }
+    const now=Date.now();
+    if(now-lastTap<320 && Math.hypot(t.clientX-lastTapX,t.clientY-lastTapY)<36){
+      lastTap=0;
+      if(z.s>1.2) reset();
+      else zoomAt(t.clientX, t.clientY, 2.8);
+      mode=null; return;
+    }
+    lastTap=now; lastTapX=t.clientX; lastTapY=t.clientY;
+    await browseClick(img, {clientX:t.clientX, clientY:t.clientY}, stage._zoom);
+    mode=null;
+  },{passive:false});
+}
 let browseArmed=false;
 function isBrowseCatch(el){ return el && (el.id==="btype"||el.id==="watchin"||el.id==="bkeys"); }
 function armBrowseType(){
@@ -3153,10 +3290,13 @@ function armBrowseType(){
   const el=phone?(activeTab==="browser"?$("btype"):$("watchin")):$("bkeys");
   if(el){ try{ el.focus({preventScroll:true}); }catch{ el.focus(); } }
 }
-async function browseClick(img, ev){
+async function browseClick(img, ev, pad){
   const p=shotPoint(img, ev); if(!p) return;
-  try{ await api("/api/browse/click",{method:"POST",body:browseBody(p)}); setTimeout(pollBrowse,200); }
-  catch(e){toast(e.message)}
+  try{
+    const d=await api("/api/browse/click",{method:"POST",body:browseBody(p)});
+    setTimeout(pollBrowse,200);
+    if(d && d.editable && pad && pad.zoomAt && phoneBrowse() && pad.z.s<1.8) pad.zoomAt(ev.clientX, ev.clientY, 3);
+  }catch(e){toast(e.message)}
   armBrowseType();
 }
 async function browseScroll(img, ev){
@@ -3210,6 +3350,7 @@ document.addEventListener("keydown",async ev=>{
     try{ await sendBrowseKey(map[ev.key]); }catch(e){toast(e.message)}
   }
 });
+if($("chatbr")) $("chatbr").onclick=()=>openChatBrowser();
 if($("bcardopen")) $("bcardopen").onclick=ev=>{
   if(ev.target.closest("#bcardx")) return;
   openBrowseView();
@@ -3276,7 +3417,16 @@ $("bgo").onclick=async()=>{const u=$("burl").value.trim(); if(!u)return; try{con
 if($("bfront")) $("bfront").onclick=async()=>{try{await api("/api/browse/front",{method:"POST",body:browseBody({})});}catch(e){toast(e.message)}};
 $("burl").addEventListener("keydown",e=>{if(e.key==="Enter"){$("bgo").click();e.preventDefault()}});
 $("bback").onclick=async()=>{
-  if(window.matchMedia("(max-width:720px)").matches){ goHome(); return; }
+  if(window.matchMedia("(max-width:720px)").matches){
+    const back=browseFromChat;
+    browseFromChat=null;
+    if(back){
+      const w=findWin(back.id, back.slug);
+      if(w){ selectAgent(w.id, slugOf(w)); return; }
+    }
+    goHome();
+    return;
+  }
   try{const d=await api("/api/browse/back",{method:"POST",body:browseBody({})}); if(d.url)$("burl").value=d.url}catch(e){toast(e.message)}
 };
 $("bstage").onclick=async ev=>{ if(watchSkipClick){ watchSkipClick=false; return; } browseClick($("bframe"), ev); };
@@ -3311,6 +3461,7 @@ function paintToggles(){
     t.classList.toggle("on",on);
   });
   applyTheme(settings.theme==="light"?"light":"dark");
+  paintChatBr(current);
 }
 if($("hideterm")) $("hideterm").onclick=async()=>{
   try{ await api("/api/hide-terminals",{method:"POST",body:"{}"}); toast("terminals hidden"); }

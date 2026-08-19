@@ -1083,15 +1083,24 @@ MODELS = {
 
 
 def normalize_ai(ai: str | None) -> str:
-    a = (ai or "grok").strip().lower()
-    return a if a in AIS else "grok"
+    import re
+    import shutil
+
+    a = re.sub(r"[^a-z0-9_-]", "", (ai or "grok").strip().lower())[:32]
+    if a in AIS:
+        return a
+    if a and shutil.which(a):
+        return a
+    return "grok"
 
 
 def normalize_model(ai: str | None, model: str | None) -> str:
     ai = normalize_ai(ai)
-    opts = [m[0] for m in MODELS[ai]]
+    opts = [m[0] for m in MODELS.get(ai) or [("", "Default")]]
     if model in opts:
         return str(model)
+    if ai not in MODELS:
+        return str(model or "")
     return opts[0]
 
 

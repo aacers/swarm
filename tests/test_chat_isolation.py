@@ -330,6 +330,18 @@ class IsolationUnit(unittest.TestCase):
         self.assertIn("gpt-5.4", cmd)
         self.assertNotIn("--session-id", cmd)
 
+    def test_launch_cmd_generic_cli_plain_exec(self):
+        import agents_tmux
+
+        work = Path(self.tmp.name) / "bot-g"
+        work.mkdir()
+        with mock.patch.object(agents_tmux, "bin_for", return_value="/opt/homebrew/bin/gemini"):
+            cmd = agents_tmux.launch_cmd("gemini", work, "sid-x")
+        self.assertIn("gemini", cmd)
+        self.assertIn("exec", cmd)
+        self.assertNotIn("--always-approve", cmd)
+        self.assertNotIn("--session-id", cmd)
+
     def test_ensure_codex_trust_appends_once(self):
         import agents_tmux
 
@@ -2060,8 +2072,53 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("idleAt<400", html)
         self.assertNotIn("unansweredUser(current)", html.split("function applyChatState", 1)[1].split("function paintBusyNow", 1)[0])
         self.assertIn("function pendingWork(w)", html)
+        fn = html.split("function showBusy(w){", 1)[1].split("function isMini", 1)[0]
         self.assertLess(fn.find("w.busy===true"), fn.find("lastTurnDone(w)"))
         self.assertNotIn("progress.waiting=false", fn)
+
+    def test_browse_ids_detects_bot_from_tmux_and_cwd(self):
+        import browse_ids
+
+        self.assertEqual(browse_ids.normalize_bot("heavy-bot-6344"), "bot-6344")
+        self.assertEqual(browse_ids.normalize_bot(""), "shared")
+        self.assertEqual(
+            browse_ids.detect_bot(env={"SWARM_SLUG": "naptara"}, cwd="/tmp", tmux_name=""),
+            "naptara",
+        )
+        self.assertEqual(
+            browse_ids.detect_bot(
+                env={},
+                cwd="/Users/tim/.grok/imac-phone/workspaces/bot-71128",
+                tmux_name="",
+            ),
+            "bot-71128",
+        )
+        self.assertEqual(
+            browse_ids.detect_bot(env={}, cwd="/tmp", tmux_name="heavy-degero"),
+            "degero",
+        )
+        self.assertTrue(str(browse_ids.profile_dir("shared")).endswith("/browser/profile"))
+        self.assertIn("/profiles/bot-6344", str(browse_ids.profile_dir("bot-6344")))
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("function browseBot()", html)
+        self.assertIn("function browseBody(o)", html)
+
+    def test_mobile_chat_can_open_browser(self):
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="chatbr"', html)
+        self.assertNotIn('id="findbtn"', html)
+        self.assertNotIn('id="findbar"', html)
+        self.assertIn("function openChatBrowser(", html)
+        self.assertIn("browseFromChat", html)
+        self.assertIn("#mhead #chatbr", html)
+        paint = html.split("function paintBrowse(d){", 1)[1].split("function openBrowseView", 1)[0]
+        self.assertIn("hasPage", paint)
+        self.assertNotIn("botIsBrowsing(current)", paint)
+        self.assertIn("browseFromChat=current?{id:current.id, slug:slugOf(current)}:null", html)
+        self.assertIn("if($(\"chatbr\")) $(\"chatbr\").onclick=()=>openChatBrowser();", html)
+        back = html.split('$("bback").onclick=async()=>{', 1)[1].split("$(\"bstage\")", 1)[0]
+        self.assertIn("browseFromChat", back)
+        self.assertIn("selectAgent(w.id, slugOf(w))", back)
 
     def test_all_chat_windows_pin_messages_above_composer(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

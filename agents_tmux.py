@@ -24,6 +24,8 @@ PREFIX = "heavy-"
 HELPER_PREFIX = "h--"
 WORK_ROOT = Path.home() / ".grok" / "imac-phone" / "workspaces"
 AIS = ("grok", "claude", "codex")
+# Other terminal AIs we probe. Anything else in PATH can still be a bot.
+EXTRA_AIS = ("gemini", "aider", "opencode", "cursor-agent", "amp", "crush")
 # Live status only. Do not match cwd paths like thinking-remote-… or old tool names.
 LIVE_BUSY_RE = re.compile(
     r"(?:^|[\s—–-])(?:Thinking|Preparing)(?:…|\.\.\.|:|\s|$)|"
@@ -42,22 +44,30 @@ SPINNER_RE = re.compile(r"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]")
 
 
 def normalize_ai(ai: str | None) -> str:
-    a = (ai or "grok").strip().lower()
-    return a if a in AIS else "grok"
+    a = re.sub(r"[^a-z0-9_-]", "", (ai or "grok").strip().lower())[:32]
+    if a in AIS or a in EXTRA_AIS:
+        return a
+    if a and shutil.which(a):
+        return a
+    return "grok"
 
 
 def bin_for(ai: str) -> str:
     ai = normalize_ai(ai)
-    path = {"grok": GROK, "claude": CLAUDE, "codex": CODEX}[ai]
+    special = {"grok": GROK, "claude": CLAUDE, "codex": CODEX}.get(ai)
+    path = special if special and Path(special).exists() else shutil.which(ai)
     if not path or not Path(path).exists():
-        raise RuntimeError(f"{ai} staat niet op deze Mac")
+        raise RuntimeError(f"{ai} is not on this Mac")
     return path
 
 
 def providers_ok() -> dict:
     out = {}
-    for name, path in (("grok", GROK), ("claude", CLAUDE), ("codex", CODEX)):
-        out[name] = bool(path and Path(path).exists())
+    for name in AIS + EXTRA_AIS:
+        try:
+            out[name] = bool(bin_for(name))
+        except Exception:
+            out[name] = False
     return out
 
 
@@ -113,6 +123,9 @@ def launch_cmd(ai: str, work: Path, sid: str, model: str = "", resume: bool = Fa
             f"{path}cd {work_q} && exec {exe_q}{mflag} -C {work_q} "
             f"--ask-for-approval never --sandbox danger-full-access"
         )
+    if ai not in AIS:
+        extra = f" {shlex.quote(model)}" if model else ""
+        return f"{path}cd {work_q} && exec {exe_q}{extra}"
     mflag = f" -m {shlex.quote(model)}" if model else ""
     if resume:
         return f"{path}exec {exe_q}{mflag} --resume {sid_q} --always-approve --cwd {work_q}"
@@ -308,7 +321,7 @@ def cmd_ai(cmd: str) -> str:
     """AI from an argv/command string. Only the executable name, never prompt text."""
     for tok in (cmd or "").split():
         base = Path(tok.strip("\"'")).name.lower()
-        if base in AIS:
+        if base in AIS or base in EXTRA_AIS:
             return base
     return ""
 

@@ -2,7 +2,7 @@
 
 A team of AI terminals on one Mac, steered from your iPhone.
 
-Each bot is a real [Grok](https://grok.com), [Claude](https://claude.ai/code), or ChatGPT ([Codex](https://github.com/openai/codex)) session — and each has its own Chrome. Mix them on the same roster.
+Each bot is a real terminal AI — [Grok](https://grok.com), [Claude](https://claude.ai/code), ChatGPT ([Codex](https://github.com/openai/codex)), Gemini, Aider, OpenCode, Cursor, or any other CLI on your Mac. Mix them on the same roster. Each bot has its own Chrome.
 
 Not a cloud chatbot. Swarm is the control plane: hidden `tmux` sessions, one live chat per bot, one browser per bot, and a phone UI over Wi‑Fi or 5G.
 
@@ -10,7 +10,7 @@ The models still do the work. Swarm is how you run several at once, without leav
 
 ## What you get
 
-- **Bots** — Grok, Claude, or ChatGPT (Codex); switch per bot. Each one has its own browser.
+- **Bots** — any AI that runs in a terminal. Grok, Claude, ChatGPT, Gemini, … switch per bot. Each one has its own browser.
 - **Phone UI** — chats, Stop that cancels the current turn, live pills, loops, files
 - **Overleg** — bots pass work to each other as normal user turns
 - **Browser** — each bot gets its own Chrome (`gbrowse`); the phone follows the open chat
@@ -26,7 +26,7 @@ The models still do the work. Swarm is how you run several at once, without leav
 
 - macOS
 - `tmux`
-- At least one CLI signed in: `grok`, `claude`, and/or `codex`
+- At least one AI CLI in PATH (`grok`, `claude`, `codex`, `gemini`, …)
 - Python 3.11+ with PyObjC (`Quartz` + `AppKit`)
 
 ## Run (one script)
