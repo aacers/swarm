@@ -1850,6 +1850,24 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertTrue(icon.is_file())
         self.assertGreater(icon.stat().st_size, 2000)
 
+    def test_parse_login_pane_extracts_device_code(self):
+        pane = (
+            "Visit https://auth.x.ai/device\n"
+            "Enter code: AB12-CD34\n"
+        )
+        info = server.agents_tmux.parse_login_pane(pane)
+        self.assertTrue(info["needed"])
+        self.assertIn("auth.x.ai", info["url"])
+        self.assertEqual(info["code"], "AB12-CD34")
+        idle = "❯ \nGrok 4.6 · always-approve"
+        self.assertFalse(server.agents_tmux.parse_login_pane(idle)["needed"])
+
+    def test_login_ui_has_sign_in_controls(self):
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("id=\"loginbar\"", html)
+        self.assertIn("id=\"asetlogin\"", html)
+        self.assertIn("/api/cli-login", html)
+
     def test_new_bot_picker_allows_other_cli(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("function openNewBot(", html)
@@ -2127,6 +2145,37 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         back = html.split('$("bback").onclick=async()=>{', 1)[1].split("$(\"bstage\")", 1)[0]
         self.assertIn("browseFromChat", back)
         self.assertIn("selectAgent(w.id, slugOf(w))", back)
+
+    def test_mobile_browser_zoom_and_select(self):
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("function bindBrowsePad(", html)
+        self.assertIn("function stickBrowseComposer(", html)
+        self.assertIn('id="bzoombar"', html)
+        self.assertIn("/api/browse/mouse", html)
+        self.assertIn('sendMouse("dbl"', html)
+        self.assertIn("d.editable", html)
+        self.assertIn("Pinch to zoom", html)
+        daemon = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        self.assertIn('elif cmd == "mouse":', daemon)
+        self.assertIn("def _focus_info(", daemon)
+        self.assertIn("def _selected_text(", daemon)
+        self.assertIn('"mouse"', daemon)
+
+    def test_browse_actions_do_not_wait_for_shot(self):
+        src = (ROOT / "browse_daemon.py").read_text(encoding="utf-8")
+        click = src.split('elif cmd == "click":', 1)[1].split('elif cmd == "mouse":', 1)[0]
+        typ = src.split('elif cmd == "type":', 1)[1].split('elif cmd == "key":', 1)[0]
+        key = src.split('elif cmd == "key":', 1)[1].split('elif cmd == "scroll":', 1)[0]
+        scroll = src.split('elif cmd == "scroll":', 1)[1].split('elif cmd == "back":', 1)[0]
+        for block in (click, typ, key, scroll):
+            self.assertNotIn("snap(", block)
+            self.assertIn("request_shot()", block)
+        self.assertIn("insert_text", typ)
+        self.assertIn("disable-renderer-backgrounding", src)
+        self.assertIn("want_shot", src)
+        self.assertNotIn('got = call("shot"', src)
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("return 320", html)
 
     def test_all_chat_windows_pin_messages_above_composer(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

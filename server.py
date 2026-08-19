@@ -56,7 +56,7 @@ TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.61"
+VERSION = "1.8.64"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
 STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
@@ -3878,6 +3878,7 @@ def collect_chat(win: dict) -> dict:
         "crew": crew_for_slug(slug or "", meta),
         "loops": rosterlib.public_loops(slug) if slug else [],
         "progress": prog,
+        "login": login_state(win, meta, str(packed.get("tmux") or "")),
     }
     crew = out["crew"] or []
     if stopped or (answered and not pane_live and not last_submit_hold(meta)):
@@ -3891,6 +3892,86 @@ def collect_chat(win: dict) -> dict:
     if cache_key:
         _collect_cache[cache_key] = (now, out)
     return out
+
+
+def login_state(win: dict, meta: dict, tmux: str) -> dict:
+    """What the phone should show so this CLI can be signed in from Swarm."""
+    ai = rosterlib.normalize_ai((meta or {}).get("ai") or (win or {}).get("ai"))
+    flagged = bool((meta or {}).get("auth_login"))
+    pane = ""
+    if tmux:
+        try:
+            pane = agents_tmux.capture_pane(tmux, 50)
+        except Exception:
+            pane = ""
+    info = agents_tmux.parse_login_pane(pane)
+    signed = False
+    try:
+        signed = agents_tmux.logged_in(ai)
+    except Exception:
+        signed = False
+    if flagged and signed:
+        try:
+            finish_cli_login(win, meta)
+        except Exception as exc:
+            print("finish login", exc, flush=True)
+        return {"needed": False, "ai": ai}
+    needed = flagged or bool(info.get("url") or info.get("code"))
+    if not needed:
+        return {"needed": False, "ai": ai}
+    return {
+        "needed": True,
+        "ai": ai,
+        "url": info.get("url") or "",
+        "code": info.get("code") or "",
+        "hint": "Open the link on this phone, then tap Done.",
+    }
+
+
+def start_cli_login(win: dict, meta: dict | None = None) -> dict:
+    slug = str((win or {}).get("slug") or slug_for_window(win) or "")
+    rost = rosterlib.load_roster()
+    meta = dict(meta or (rost.get("agents") or {}).get(slug) or {})
+    ai = rosterlib.normalize_ai(meta.get("ai") or win.get("ai"))
+    name = str(win.get("tmux") or meta.get("tmux") or "")
+    if not name:
+        raise RuntimeError("no live chat")
+    agents_tmux.respawn(
+        name,
+        ai=ai,
+        cwd=meta.get("cwd"),
+        sid=str(meta.get("session_id") or ""),
+        model=str(meta.get("model") or ""),
+        login=True,
+    )
+    if slug and slug in (rost.get("agents") or {}):
+        rost["agents"][slug]["auth_login"] = True
+        rosterlib.save_roster(rost)
+    return {"ok": True, "login": True, "ai": ai}
+
+
+def finish_cli_login(win: dict, meta: dict | None = None) -> dict:
+    slug = str((win or {}).get("slug") or slug_for_window(win) or "")
+    rost = rosterlib.load_roster()
+    meta = dict(meta or (rost.get("agents") or {}).get(slug) or {})
+    ai = rosterlib.normalize_ai(meta.get("ai") or win.get("ai"))
+    name = str(win.get("tmux") or meta.get("tmux") or "")
+    if not name:
+        raise RuntimeError("no live chat")
+    info = agents_tmux.respawn(
+        name,
+        ai=ai,
+        cwd=meta.get("cwd"),
+        sid=str(meta.get("session_id") or "") or None,
+        model=str(meta.get("model") or ""),
+        login=False,
+    )
+    if slug and slug in (rost.get("agents") or {}):
+        rost["agents"][slug]["auth_login"] = False
+        if info.get("session_id"):
+            rost["agents"][slug]["session_id"] = info["session_id"]
+        rosterlib.save_roster(rost)
+    return {"ok": True, "login": False, "ai": ai}
 
 
 def _clear_tmux_overlay(tmux: str) -> None:
@@ -5918,7 +5999,12 @@ def open_new_terminal(ai: str = "grok", model: str = "") -> dict:
     model = rosterlib.normalize_model(ai, model)
     maybe_update_ai(ai)
     started = time.time()
-    info = agents_tmux.spawn(ai=ai, model=model)
+    need_login = False
+    try:
+        need_login = not agents_tmux.logged_in(ai)
+    except Exception:
+        need_login = False
+    info = agents_tmux.spawn(ai=ai, model=model, login=need_login)
     rost = rosterlib.load_roster()
     slug = info["slug"]
     rost["agents"][slug] = {
@@ -5932,6 +6018,7 @@ def open_new_terminal(ai: str = "grok", model: str = "") -> dict:
         "cwd": info.get("cwd"),
         "ai": ai,
         "model": model,
+        "auth_login": need_login,
     }
     order = rost.setdefault("order", [])
     if slug in order:
@@ -6288,6 +6375,7 @@ def make_handler(app: App):
                         "busy_for": (main or {}).get("busy_for") or 0,
                         "last_submit_at": meta.get("last_submit_at"),
                         "route": route,
+                        "login": chat.get("login") or {},
                     }
                 )
                 return
@@ -6714,6 +6802,13 @@ def make_handler(app: App):
                     win = resolve_delivery(body)
                     self._json(interrupt_chat(win))
                     return
+                if path == "/api/cli-login":
+                    win = resolve_delivery(body)
+                    done = str(body.get("op") or "") in {"done", "finish"}
+                    extra = finish_cli_login(win) if done else start_cli_login(win)
+                    extra["login"] = extra.get("login")
+                    self._json(extra)
+                    return
                 if path == "/api/type":
                     text = str(body.get("text") or "")
                     if len(text) > 4000:
@@ -6722,6 +6817,10 @@ def make_handler(app: App):
                         raise RuntimeError("pick a bot first")
                     win = resolve_delivery(body)
                     slug = slug_for_window(win) or str(win.get("slug") or body.get("slug") or "")
+                    if body.get("raw") or body.get("login"):
+                        deliver_text(win, text, bool(body.get("submit", True)))
+                        self._json({"ok": True, "raw": True})
+                        return
                     if str(body.get("op") or "") in {"starthelper", "spawnhelper"}:
                         if not slug:
                             raise RuntimeError("no bot")

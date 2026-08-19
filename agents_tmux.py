@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shlex
 import shutil
@@ -50,6 +51,89 @@ def normalize_ai(ai: str | None) -> str:
     if a and shutil.which(a):
         return a
     return "grok"
+
+
+_LOGIN_HINT = re.compile(
+    r"sign in|log in|logged out|not logged|device.?code|enter (the )?code|"
+    r"visit |open .*browser|authenticate|oauth|verification code",
+    re.I,
+)
+_LOGIN_CODE = re.compile(r"\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\b")
+
+
+_logged_cache: dict[str, tuple[float, bool]] = {}
+
+
+def logged_in(ai: str) -> bool:
+    """True if this CLI already has credentials on this Mac."""
+    ai = normalize_ai(ai)
+    now = time.time()
+    hit = _logged_cache.get(ai)
+    if hit and now - hit[0] < 8:
+        return hit[1]
+    ok = False
+    try:
+        exe = bin_for(ai)
+        if ai == "grok":
+            p = Path.home() / ".grok" / "auth.json"
+            data = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+            ok = isinstance(data, dict) and any(
+                isinstance(v, dict) and v.get("key") for v in data.values()
+            )
+        elif ai == "claude":
+            r = subprocess.run([exe, "auth", "status"], capture_output=True, timeout=8)
+            t = (r.stdout or b"").decode("utf-8", "replace")
+            compact = t.replace(" ", "")
+            if "loggedIn" in t:
+                ok = '"loggedIn":true' in compact
+            else:
+                ok = r.returncode == 0 and "not logged" not in t.lower()
+        elif ai == "codex":
+            r = subprocess.run([exe, "login", "status"], capture_output=True, timeout=8)
+            t = ((r.stdout or b"") + (r.stderr or b"")).decode("utf-8", "replace").lower()
+            ok = "logged in" in t and "not logged" not in t and "logged out" not in t
+        else:
+            ok = True
+    except Exception:
+        ok = False
+    _logged_cache[ai] = (now, ok)
+    return ok
+
+
+def login_launch_cmd(ai: str, work: Path) -> str:
+    ai = normalize_ai(ai)
+    exe = bin_for(ai)
+    path = 'export PATH="$HOME/.grok/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"; '
+    work_q = shlex.quote(str(work))
+    exe_q = shlex.quote(exe)
+    if ai == "grok":
+        args = "login --device-auth"
+    elif ai == "claude":
+        args = "auth login"
+    elif ai == "codex":
+        args = "login --device-auth"
+    else:
+        args = "login"
+    return f"{path}cd {work_q} && exec {exe_q} {args}"
+
+
+def parse_login_pane(pane: str) -> dict:
+    t = pane or ""
+    url = ""
+    for u in re.findall(r"https://[^\s>'\"\]|]+", t):
+        u = u.rstrip(".,);")
+        low = u.lower()
+        if any(x in low for x in ("auth", "login", "device", "oauth", "claude.ai", "openai.com", "x.ai", "google.com")):
+            url = u
+            break
+        if not url:
+            url = u
+    code = ""
+    m = _LOGIN_CODE.search(t)
+    if m:
+        code = m.group(1)
+    needed = bool(url or code or _LOGIN_HINT.search(t))
+    return {"needed": needed, "url": url, "code": code}
 
 
 def bin_for(ai: str) -> str:
@@ -450,7 +534,7 @@ def list_sessions(include_helpers: bool = False) -> list[dict]:
         _list_lock.release()
 
 
-def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", model: str = "", sid: str | None = None, resume: bool = False) -> dict:
+def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", model: str = "", sid: str | None = None, resume: bool = False, login: bool = False) -> dict:
     ai = normalize_ai(ai)
     slug = (label or f"bot-{int(time.time()) % 100000}").lower()
     slug = "".join(ch if ch.isalnum() else "-" for ch in slug).strip("-")[:40] or "bot"
@@ -472,13 +556,13 @@ def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", mo
             dest.symlink_to(shared)
     except Exception:
         pass
-    if ai == "codex":
+    if ai == "codex" and not login:
         ensure_codex_trust(work)
-    cmd = launch_cmd(ai, work, sid, model=model, resume=resume)
+    cmd = login_launch_cmd(ai, work) if login else launch_cmd(ai, work, sid, model=model, resume=resume)
     r = _run(["new-session", "-d", "-s", name, "-c", str(work), cmd])
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).decode() or "tmux spawn failed")
-    if ai == "codex":
+    if ai == "codex" and not login:
         time.sleep(0.5)
         dismiss_codex_trust(name)
     return {
@@ -495,19 +579,19 @@ def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", mo
     }
 
 
-def respawn(name: str, ai: str = "grok", cwd: str | None = None, sid: str | None = None, model: str = "") -> dict:
+def respawn(name: str, ai: str = "grok", cwd: str | None = None, sid: str | None = None, model: str = "", login: bool = False) -> dict:
     ai = normalize_ai(ai)
     slug = slug_of_session(name)
     work = Path(cwd).expanduser() if cwd else (WORK_ROOT / slug)
     work.mkdir(parents=True, exist_ok=True)
     sid = sid or str(uuid.uuid4())
-    if ai == "codex":
+    if ai == "codex" and not login:
         ensure_codex_trust(work)
-    cmd = launch_cmd(ai, work, sid, model=model)
+    cmd = login_launch_cmd(ai, work) if login else launch_cmd(ai, work, sid, model=model)
     r = _run(["respawn-pane", "-k", "-c", str(work), "-t", name, cmd])
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).decode() or "tmux respawn failed")
-    if ai == "codex":
+    if ai == "codex" and not login:
         time.sleep(0.5)
         dismiss_codex_trust(name)
     return {

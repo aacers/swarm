@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.63"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.64"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -272,6 +272,13 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 [data-theme=dark] .msg.bezig .bezig-row{background:#14532d;color:#bbf7d0}
 [data-theme=dark] .msg.bezig .dots3 i{background:#4ade80}
 #waitbox{display:none !important}
+#loginbar{display:none;flex:0 0 auto;margin:0 16px 8px;padding:12px 14px;border:1px solid var(--line);background:var(--card);border-radius:16px}
+#loginbar.on{display:block}
+#loginbar b{display:block;font-size:15px;margin-bottom:6px}
+#loginbar a{color:var(--accent);font-weight:800;word-break:break-all}
+#loginbar .code{display:inline-block;margin:8px 0;padding:6px 10px;border-radius:10px;background:var(--row);font:700 18px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.06em}
+#loginbar .rowbtns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+#loginbar button{border:0;border-radius:12px;padding:10px 14px;font-weight:800;background:var(--accent);color:#eef0f8}
 .waitpill{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 8px;border-radius:999px;background:#ecfdf3;color:#166534;font-size:11px;font-weight:650;border:0;cursor:pointer;font:inherit}
 .waitpill.on{box-shadow:0 0 0 2px #16a34a}
 #agentinfo{display:none !important}
@@ -517,6 +524,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
         <button class="talkbtn" id="talk" title="Huddle" aria-label="Huddle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7h11l-3-3"/><path d="M16 17H5l3 3"/></svg><span class="talklab">Huddle</span></button>
         </div>
       </div>
+      <div id="loginbar"></div>
       <div id="chat">
         <div id="chatlog"><div class="empty" id="empty"><h2>Swarm</h2><div>Tap <b>+ Bot</b> (top) to start.<br>Then type below.<br>On iPhone: swipe to close.</div></div></div>
       </div>
@@ -603,6 +611,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   <div class="field"><label>Color</label><div id="asetcolors" class="igrid colors"></div></div>
   <div class="perm"><div><b>Team boss</b><div class="st">one bot is the boss</div></div><button class="toggle" id="asetceo"><i></i></button></div>
   <div class="perm"><div><b>Default chat</b><div class="st">opens first · one conversation, no extra-agent pills</div></div><button class="toggle" id="asethome"><i></i></button></div>
+  <button type="button" class="sav" id="asetlogin" style="margin:8px 0 12px">Sign in this CLI</button>
   <div class="field"><label>Memory for this bot (memory.md)</label><textarea id="asetmem"></textarea></div>
   <div class="field"><label>Loops — repeating task</label>
     <div id="asetloops"></div>
@@ -1104,7 +1113,8 @@ function orderIndex(w){
 }
 function typePayload(w,text,submit){
   const m=metaOf(w)||{};
-  return {id:w.id,slug:slugOf(w)||m.slug||"",tmux:w.tmux||m.tmux||"",text,submit:!!submit,busy:false};
+  const login=!!(w.login&&w.login.needed);
+  return {id:w.id,slug:slugOf(w)||m.slug||"",tmux:w.tmux||m.tmux||"",text,submit:!!submit,busy:false,raw:login,login};
 }
 const unread={};
 const prevBusy={};
@@ -1907,8 +1917,38 @@ async function stopChat(){
     paintBusyNow();
   }
 }
+function paintLogin(){
+  const el=$("loginbar"); if(!el) return;
+  const L=current&&current.login;
+  if(!L||!L.needed){ el.classList.remove("on"); el.innerHTML=""; return; }
+  const name=aiLabel(L.ai||aiOf(current));
+  const url=L.url||"";
+  const code=L.code||"";
+  el.classList.add("on");
+  el.innerHTML=`<b>Sign in to ${esc(name)}</b>
+    ${url?`<a href="${esc(url)}" target="_blank" rel="noopener">Open login page</a>`:""}
+    ${code?`<div class="code" id="logincode">${esc(code)}</div>`:""}
+    <div>${esc(L.hint||"Finish login on this phone, then tap Done.")}</div>
+    <div class="rowbtns"><button type="button" id="logindone">Done — start bot</button></div>`;
+}
+if($("loginbar")) $("loginbar").onclick=async ev=>{
+  if(ev.target.id==="logincode"){
+    copyText(ev.target.textContent||"");
+    toast("code copied");
+    return;
+  }
+  if(ev.target.id!=="logindone" || !current) return;
+  try{
+    await api("/api/cli-login",{method:"POST",body:JSON.stringify({...typePayload(current,"",false),op:"done"})});
+    current.login={needed:false};
+    paintLogin();
+    toast("starting bot");
+    armChat(chatKey(current), chatToken);
+  }catch(e){ toast(e.message); }
+};
 function paintWait(){
   const el=$("waitbox");
+  paintLogin();
   paintChatBusy();
   paintStop();
   if(!el) return;
@@ -1987,6 +2027,8 @@ function applyChatState(d, want){
   if(d.busy_since!=null) current.busy_since=d.busy_since;
   if(d.busy_for!=null) current.busy_for=d.busy_for;
   if(d.last_submit_at!=null) current.last_submit_at=d.last_submit_at;
+  if(d.login) current.login=d.login;
+  paintLogin();
   if(d.progress){
     if(justStopped(current)){
       d.progress.waiting=false;
@@ -2955,6 +2997,17 @@ if($("asetdel")) $("asetdel").onclick=async()=>{
   }catch(e){ toast(e.message); }
   finally{ btn.textContent="Delete bot"; }
 };
+if($("asetlogin")) $("asetlogin").onclick=async()=>{
+  if(!current){toast("pick a bot first");return}
+  $("aset").classList.remove("on");
+  try{
+    await api("/api/cli-login",{method:"POST",body:JSON.stringify(typePayload(current,"",false))});
+    current.login={needed:true,ai:aiOf(current)};
+    paintLogin();
+    toast("sign-in started");
+    armChat(chatKey(current), chatToken);
+  }catch(e){ toast(e.message); }
+};
 $("asetsave").onclick=async()=>{
   if(!current) return;
   const slug=slugOf(current); if(!slug){toast("no profile");return}
@@ -3044,9 +3097,9 @@ function browseWantsShot(){
 }
 function browsePollMs(){
   if(document.hidden || settings.browser===false) return 0;
-  if(activeTab==="browser") return 650;
-  if(browseViewOpen()) return 700;
-  if(browseCardOn()) return 1200;
+  if(activeTab==="browser") return 320;
+  if(browseViewOpen()) return 360;
+  if(browseCardOn()) return 800;
   return 2800;
 }
 function armBrowsePoll(){
@@ -3848,10 +3901,13 @@ async function sendWork(text){
   const destWin=current;
   if(!destWin) return;
   const dest=chatKey(destWin);
-  pending[dest]=pending[dest]||[];
-  pending[dest].push({role:"user",text,at:Date.now()});
-  markSubmit(destWin);
-  paintBusyNow();
+  const login=!!(destWin.login&&destWin.login.needed);
+  if(!login){
+    pending[dest]=pending[dest]||[];
+    pending[dest].push({role:"user",text,at:Date.now()});
+    markSubmit(destWin);
+    paintBusyNow();
+  }
   try{ await api("/api/type",{method:"POST",body:JSON.stringify(typePayload(destWin,text,true))}); }
   catch(e){ toast(e.message); }
 }
