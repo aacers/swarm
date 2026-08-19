@@ -12,6 +12,7 @@ It also runs [Claude](https://claude.ai/code), ChatGPT ([Codex](https://github.c
 - **Phone UI** — chats, Stop that cancels the current turn, live pills, loops, files
 - **Overleg** — bots pass work to each other as normal user turns
 - **Browser** — each bot gets its own Chrome (`gbrowse`); the phone follows the open chat
+- **Device lab** — Swarm tests iOS (and later Android) apps via `glab` / `/api/lab` without grabbing the Mac mouse
 - **Loops** — a 4-hour ASO sweep, a Gmail check — bounded ticks, then stop
 
 ## This is not
@@ -50,6 +51,7 @@ Stuck? **[Getting started](docs/GETTING_STARTED.md)**.
 | `roster.py` | names, loops, queues |
 | `static/` | iPhone / desktop UI |
 | `browse_daemon.py` | per-bot Chrome (`gbrowse`) |
+| `device_lab.py` | iOS Simulator lab (`glab`, `:8793`) |
 | `browse_ids.py` | which bot owns a browse call |
 
 ## License

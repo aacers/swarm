@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.78"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.79"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -217,20 +217,19 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 #chatlog .empty{margin:auto;text-align:center;align-self:center}
 #chatlog .msg{margin:0 0 5px}
 #chatlog .msg.user{align-self:flex-end;margin-left:auto;margin-right:0;margin-bottom:5px}
-#chatlog.termish > .daychip:first-child,
-#chatlog.termish > .msg:first-child{margin-top:0}
-#chatlog:not(.termish) > .daychip:first-child,
-#chatlog:not(.termish) > .msg:first-child,
-#chatlog:not(.termish) > .msg.user:first-child,
-#chatlog:not(.termish) > .msg.file:first-child,
-#chatlog:not(.termish) > .msg.fwd:first-child,
-#chatlog:not(.termish) > .msg.progress:first-child{margin-top:auto}
+#chathist{display:flex;flex-direction:column;flex:1 0 auto;min-height:100%;width:100%}
+#chathist > .daychip:first-child,
+#chathist > .msg:first-child,
+#chathist > .msg.user:first-child,
+#chathist > .msg.file:first-child,
+#chathist > .msg.fwd:first-child,
+#chathist > .msg.progress:first-child{margin-top:auto}
 #turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);position:relative;z-index:12;isolation:isolate;overflow:hidden}
 #turnsticky .acts,#turnsticky .copy,#turnsticky .reply{display:none !important}
 #turnsticky.on{display:flex}
 #turnsticky .term-user{margin:0;max-width:100%;width:100%;align-self:stretch;padding:8px 0}
 #turnsticky.many .term-user + .term-user{border-top:1px solid var(--line);margin-top:2px;padding-top:10px}
-#termview{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%;padding:2px 0 10px}
+#termview{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%;flex:0 0 auto;margin-top:8px;padding:2px 0 10px}
 .bubble.tool{display:none}
 #live{display:none;flex:0 0 auto;align-self:flex-start;width:auto;margin:0 16px 8px;padding:6px 10px;background:linear-gradient(180deg,#163024 0%,#121a16 100%);border:1px solid rgba(74,222,128,.38);border-radius:999px;box-sizing:border-box}
 html[data-theme=light] #live{background:linear-gradient(180deg,#f0fdf4 0%,#ecfdf3 100%);border-color:rgba(22,163,74,.3)}
@@ -1898,7 +1897,11 @@ function renderBubbles(msgs, extraWait, id){
   const shown=term.length?historyOffTerm(foldTurns(msgs||[], false), term, pills):foldTurns(msgs||[], waiting);
   const body=termBodyHtml(term);
   const key=String(id||(current&&current.id)||"")+"|"+(waiting?"w":"d")+"|"+shown.length+"|"+shown.map(m=>(m.role||"")+":"+(m.at||"")+":"+(m.text||"").length+":"+(m.text||"").slice(-40)).join("\n")+"|"+termSig(term)+"|"+pills.map(normMsg).join("\n");
-  if(key===lastChatKey && el.querySelector(".bubble,.msg,.fwd-head,#termview,#turnsticky")){ sizeChatEnd(); paintWait(); parkLive(); paintJump(); return; }
+  if(key===lastChatKey && el.querySelector(".bubble,.msg,.fwd-head,#termview,#turnsticky")){
+    if(waiting) pinChat(true);
+    else { sizeChatEnd(); paintWait(); parkLive(); paintJump(); }
+    return;
+  }
   if(lastChatKey && !stickBottom && shown.length){
     const prev=lastChatKey.split("|")[2];
     const was=Number(prev||0);
@@ -1926,7 +1929,7 @@ function renderBubbles(msgs, extraWait, id){
     sizeChatEnd();
     parkLive();
     paintWait();
-    if(pinNext||stickBottom) pinChat(true);
+    if(waiting || pinNext||stickBottom) pinChat(true);
     else paintJump();
     return;
   }
@@ -1935,7 +1938,7 @@ function renderBubbles(msgs, extraWait, id){
   sizeChatEnd();
   parkLive();
   paintWait();
-  if(pinNext||stickBottom) pinChat(true);
+  if(waiting || pinNext||stickBottom) pinChat(true);
   else paintJump();
 }
 let chatCopySrc=[];

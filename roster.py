@@ -213,6 +213,20 @@ def write_memory(slug: str, text: str) -> None:
 
 ROLE_START = "<!-- ROLE -->"
 ROLE_END = "<!-- /ROLE -->"
+LAB_START = "<!-- LAB -->"
+LAB_END = "<!-- /LAB -->"
+_LAB_LABELS = (
+    "apps bot",
+    "apps store",
+    "naptara",
+    "pupwatch",
+    "docmint",
+    "android",
+)
+LAB_CARD = """One-question app loop: skill **ship-app** + `glab`.
+Think (competitors/gaps/clean UI) → build iOS .app + Android .apk → `glab protocol`.
+Done only when protocol is green. Stores: only after Tim says SUBMIT (`glab ship --submit`).
+Never desktop-harness. Leave PupWatch Shots and Tim’s Samsung alone unless he asks."""
 TEAM_START = "<!-- TEAM -->"
 TEAM_END = "<!-- /TEAM -->"
 
@@ -285,6 +299,27 @@ def upsert_marked_block(text: str, start: str, end: str, body: str) -> str:
     return block + "\n"
 
 
+def wants_lab(label: str) -> bool:
+    key = (label or "").strip().lower()
+    return any(n in key for n in _LAB_LABELS)
+
+
+def ensure_lab_memory(slug: str, meta: dict | None = None, roster: dict | None = None) -> None:
+    roster = roster if roster is not None else load_roster()
+    meta = meta or (roster.get("agents") or {}).get(slug) or {}
+    if not slug or slug.startswith("h--") or (meta or {}).get("helper"):
+        return
+    label = str((meta or {}).get("label") or slug)
+    if not wants_lab(label) and slug not in {"naptara", "pupwatch"}:
+        return
+    path = memory_path(slug)
+    agent_dir(slug)
+    cur = path.read_text(encoding="utf-8") if path.exists() else f"# Memory · {slug}\n"
+    nxt = upsert_marked_block(cur, LAB_START, LAB_END, LAB_CARD)
+    if nxt != cur:
+        path.write_text(nxt, encoding="utf-8")
+
+
 def ensure_role_memory(slug: str, meta: dict | None = None, roster: dict | None = None) -> None:
     roster = roster if roster is not None else load_roster()
     meta = meta or (roster.get("agents") or {}).get(slug) or {}
@@ -306,6 +341,7 @@ def ensure_team_roles(roster: dict | None = None) -> None:
     for slug, meta in (roster.get("agents") or {}).items():
         try:
             ensure_role_memory(slug, meta, roster)
+            ensure_lab_memory(slug, meta, roster)
         except Exception:
             pass
     try:

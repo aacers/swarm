@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Talk to the local Swarm device lab (iOS Simulator / Android). Never grabs the Mac mouse."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
+
+DAEMON = "http://127.0.0.1:8793"
+
+
+def req(method: str, path: str, body: dict | None = None, timeout: float = 60):
+    data = None if body is None else json.dumps(body).encode()
+    r = urllib.request.Request(
+        DAEMON + path,
+        data=data,
+        method=method,
+        headers={"Content-Type": "application/json"} if data else {},
+    )
+    try:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
+            raw = resp.read()
+            ctype = resp.headers.get("Content-Type") or ""
+            if "json" in ctype:
+                return json.loads(raw.decode())
+            return raw
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.loads(e.read().decode())
+        except Exception:
+            err = {"error": str(e)}
+        raise SystemExit(err.get("error") or str(e))
+    except Exception as e:
+        raise SystemExit(f"device-lab niet bereikbaar ({e}). Start Swarm, of: python3 device_lab.py")
+
+
+def dump(d) -> None:
+    if isinstance(d, (bytes, bytearray)):
+        sys.stdout.buffer.write(d)
+        return
+    print(json.dumps(d, ensure_ascii=False, indent=2)[:8000])
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="glab")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status")
+    sub.add_parser("devices")
+    b = sub.add_parser("boot")
+    b.add_argument("--udid", default="")
+    b.add_argument("--ios", action="store_true")
+    b.add_argument("--android", action="store_true")
+    b.add_argument("--all", action="store_true")
+    sub.add_parser("shot")
+    sub.add_parser("audit")
+    sub.add_parser("a11y")
+    sub.add_parser("sweep")
+    i = sub.add_parser("install")
+    i.add_argument("path")
+    l = sub.add_parser("launch")
+    l.add_argument("bundle")
+    t = sub.add_parser("tap")
+    t.add_argument("label", nargs="?")
+    t.add_argument("--nx", type=float)
+    t.add_argument("--ny", type=float)
+    ty = sub.add_parser("type")
+    ty.add_argument("text")
+    ap = sub.add_parser("appearance")
+    ap.add_argument("value", nargs="?", default="")
+    cs = sub.add_parser("size")
+    cs.add_argument("value")
+    o = sub.add_parser("open")
+    o.add_argument("url")
+    te = sub.add_parser("test")
+    te.add_argument("--ios", action="store_true")
+    te.add_argument("--android", action="store_true")
+    te.add_argument("--all", action="store_true")
+    te.add_argument("--bundle", default="")
+    te.add_argument("--path", default="")
+    pr = sub.add_parser("protocol")
+    pr.add_argument("--bundle", default="")
+    pr.add_argument("--ios", default="", help="path to .app")
+    pr.add_argument("--apk", default="", help="path to .apk")
+    pr.add_argument("--repo", default="", help="run gradle/xcode unit tests in this folder")
+    sh = sub.add_parser("ship")
+    sh.add_argument("--submit", action="store_true")
+    args = p.parse_args()
+    if args.cmd == "status":
+        dump(req("GET", "/health"))
+    elif args.cmd == "devices":
+        dump(req("GET", "/devices"))
+    elif args.cmd == "boot":
+        plat = "both" if args.all else "android" if args.android else "ios" if args.ios else ""
+        dump(req("POST", "/boot", {"udid": args.udid, "platform": plat}, timeout=180))
+    elif args.cmd == "shot":
+        raw = req("GET", "/shot")
+        dest = "/Users/timgrootes/.grok/imac-phone/lab/shot.png"
+        open(dest, "wb").write(raw)
+        print(dest)
+    elif args.cmd == "audit":
+        dump(req("POST", "/audit", {}))
+    elif args.cmd == "a11y":
+        dump(req("GET", "/a11y"))
+    elif args.cmd == "sweep":
+        dump(req("POST", "/sweep", {}))
+    elif args.cmd == "install":
+        dump(req("POST", "/install", {"path": args.path}))
+    elif args.cmd == "launch":
+        dump(req("POST", "/launch", {"bundle": args.bundle}))
+    elif args.cmd == "tap":
+        body = {"label": args.label or ""}
+        if args.nx is not None:
+            body["nx"] = args.nx
+        if args.ny is not None:
+            body["ny"] = args.ny
+        dump(req("POST", "/tap", body))
+    elif args.cmd == "type":
+        dump(req("POST", "/type", {"text": args.text}))
+    elif args.cmd == "appearance":
+        dump(req("POST", "/appearance", {"value": args.value}))
+    elif args.cmd == "size":
+        dump(req("POST", "/content-size", {"value": args.value}))
+    elif args.cmd == "open":
+        dump(req("POST", "/openurl", {"url": args.url}))
+    elif args.cmd == "test":
+        plat = "both" if args.all or (args.ios and args.android) else "android" if args.android else "ios" if args.ios else "both"
+        dump(req("POST", "/test", {"platform": plat, "bundle": args.bundle, "path": args.path}, timeout=240))
+    elif args.cmd == "protocol":
+        dump(
+            req(
+                "POST",
+                "/protocol",
+                {"bundle": args.bundle, "ios_path": args.ios, "android_path": args.apk, "repo": args.repo},
+                timeout=300,
+            )
+        )
+    elif args.cmd == "ship":
+        dump(req("POST", "/ship", {"confirm": "SUBMIT" if args.submit else ""}))
+
+
+if __name__ == "__main__":
+    main()

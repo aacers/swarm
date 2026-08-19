@@ -54,11 +54,13 @@ DEFAULT_SETTINGS = {
 }
 BROWSE_PORT = 8791
 BROWSE = f"http://127.0.0.1:{BROWSE_PORT}"
+LAB_PORT = 8793
+LAB = f"http://127.0.0.1:{LAB_PORT}"
 TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.76"
+VERSION = "1.8.79"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
 STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
@@ -165,7 +167,7 @@ def swarm_alive_on(port: int) -> bool:
 
 
 def pick_port(preferred: int) -> int:
-    reserved = {BROWSE_PORT}
+    reserved = {BROWSE_PORT, LAB_PORT}
     for port in range(preferred, preferred + 40):
         if port in reserved:
             continue
@@ -246,6 +248,35 @@ def browse_proxy(
     import urllib.request
 
     url = BROWSE + subpath
+    if query:
+        url += ("&" if "?" in url else "?") + query
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={"Content-Type": "application/json"} if data else {},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.headers.get("Content-Type") or "application/octet-stream", resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, "application/json", e.read()
+    except Exception as e:
+        return 503, "application/json", json.dumps({"ok": False, "error": str(e)}).encode()
+
+
+def lab_proxy(
+    method: str,
+    subpath: str,
+    body: dict | None = None,
+    timeout: float = 40,
+    query: str = "",
+) -> tuple[int, str, bytes]:
+    import urllib.error
+    import urllib.request
+
+    url = LAB + subpath
     if query:
         url += ("&" if "?" in url else "?") + query
     data = None if body is None else json.dumps(body).encode()
@@ -1696,9 +1727,7 @@ def classify_second(win: dict, text: str, slug: str | None = None) -> str:
         return "steer"
     if not is_new_question(win, t, slug):
         return "steer"
-    if helper_slots_full(slug or ""):
-        return "queue"
-    return "helper"
+    return "queue"
 
 
 def apply_second_choice(
@@ -3137,7 +3166,8 @@ def style_pane(raw: str) -> list[dict]:
         if _TERM_STATUS.match(spin) or re.search(
             r"(?i)waiting for response|thinking…|compacting…|worked for\s+\d", spin
         ):
-            spin = re.sub(r"\s+\d+[smh]\b.*$", "", spin)
+            spin = re.sub(r"^[◆◈●]\s*", "", spin)
+            spin = re.sub(r"\s+\d+[smh][\dsmh]*\b.*$", "", spin)
             spin = re.sub(r"\s+\d+:\d+\b.*$", "", spin)
             add("status", spin.strip())
             continue
@@ -6562,6 +6592,20 @@ def make_handler(app: App):
                     return
                 self._json({"ok": True, "slug": slug, "loops": rosterlib.public_loops(slug)})
                 return
+            if path in {"/api/lab/health", "/api/lab/shot", "/api/lab/devices", "/api/lab/audit", "/api/lab/a11y"}:
+                sub = "/" + path.rsplit("/", 1)[-1]
+                timeout = 4.0 if sub in {"/health", "/devices"} else 45.0
+                status, ctype, data = lab_proxy("GET", sub, timeout=timeout)
+                if "json" in ctype:
+                    self.send_response(status)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(data)))
+                    self._set_cookie()
+                    self.end_headers()
+                    self.wfile.write(data)
+                else:
+                    self._bytes(data, ctype)
+                return
             if path in {"/api/browse/health", "/api/browse/shot", "/api/browse/read"}:
                 sub = "/" + path.rsplit("/", 1)[-1]
                 timeout = 3.0 if sub in {"/health", "/shot"} else 25.0
@@ -6935,6 +6979,17 @@ def make_handler(app: App):
                     rosterlib.write_memory(slug, text)
                     self._json({"ok": True})
                     return
+                if path.startswith("/api/lab/"):
+                    sub = path[len("/api/lab") :]
+                    timeout = 90.0 if sub.rstrip("/") in {"/sweep", "/audit", "/install"} else 40.0
+                    status, ctype, data = lab_proxy("POST", sub, body, timeout=timeout)
+                    self.send_response(status)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(data)))
+                    self._set_cookie()
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 if path.startswith("/api/browse/"):
                     sub = path[len("/api/browse") :]
                     qs = parse_qs(parsed.query)
@@ -7284,6 +7339,34 @@ def publish_phone_page(primary: str, lan: str) -> None:
         pass
 
 
+def ensure_lab_daemon() -> None:
+    """Start the local iOS/Android lab (simctl, no Mac mouse)."""
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8793/health", timeout=0.5).read()
+        return
+    except Exception:
+        pass
+    try:
+        dest = Path.home() / ".grok" / "bin" / "glab"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        src = ROOT / "glab"
+        if src.is_file():
+            dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            dest.chmod(0o755)
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(
+            [sys.executable, str(ROOT / "device_lab.py")],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        print("→ device lab on :8793", flush=True)
+    except Exception as exc:
+        print("device lab", exc, flush=True)
+
+
 def ensure_browse_daemon() -> None:
     """Start the per-bot Chrome helper if Playwright is installed."""
     try:
@@ -7373,6 +7456,7 @@ def main() -> None:
 
     threading.Thread(target=_adopt_soon, daemon=True).start()
     threading.Thread(target=ensure_browse_daemon, daemon=True).start()
+    threading.Thread(target=ensure_lab_daemon, daemon=True).start()
 
     # Keep display awake while this remote is up
     caff = subprocess.Popen(["caffeinate", "-dims"])

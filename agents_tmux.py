@@ -573,6 +573,13 @@ def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", mo
             dest.symlink_to(shared)
     except Exception:
         pass
+    agents = work / "AGENTS.md"
+    src_agents = Path.home() / ".grok" / "AGENTS.md"
+    try:
+        if src_agents.is_file() and not agents.exists():
+            agents.write_text(src_agents.read_text(encoding="utf-8"), encoding="utf-8")
+    except Exception:
+        pass
     if ai == "codex" and not login:
         ensure_codex_trust(work)
     cmd = login_launch_cmd(ai, work) if login else launch_cmd(ai, work, sid, model=model, resume=resume)

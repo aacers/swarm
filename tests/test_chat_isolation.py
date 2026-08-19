@@ -545,7 +545,7 @@ class IsolationUnit(unittest.TestCase):
         self.assertTrue(by["bot-d"]["home"])
         self.assertFalse(by["bot-ask"]["home"])
 
-    def test_home_bot_starts_helper_for_new_task_when_busy(self):
+    def test_home_bot_queues_new_task_when_busy(self):
         rosterlib.save_roster(
             _roster(
                 {
@@ -568,13 +568,13 @@ class IsolationUnit(unittest.TestCase):
                         ) as helper:
                             with mock.patch.object(server, "deliver_text") as deliver:
                                 out = server.dispatch_text(win, "tweede vraag over spacex", True)
-        self.assertEqual(out.get("choice"), "helper")
-        self.assertTrue(out.get("helper"))
-        self.assertFalse(out.get("queued"))
+        self.assertEqual(out.get("choice"), "queue")
+        self.assertTrue(out.get("queued"))
+        self.assertFalse(out.get("helper"))
         self.assertEqual(out.get("chosen_by"), "swarm")
-        helper.assert_called_once()
+        helper.assert_not_called()
         deliver.assert_not_called()
-        self.assertEqual(rosterlib.load_queue("bot-ask"), [])
+        self.assertEqual(len(rosterlib.load_queue("bot-ask")), 1)
 
     def test_first_message_not_parked_when_idle(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
@@ -1340,6 +1340,17 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertNotIn("always-approve", texts)
         self.assertTrue(any(b["kind"] == "status" for b in blocks))
 
+    def test_style_pane_strips_thinking_clock(self):
+        raw = """
+    ⠧ Thinking… 1m17s                                       8m39s ⇣284k [stop]
+  ┃  ◆ Thinking…
+"""
+        blocks = server.style_pane(raw)
+        status = " ".join(b["text"] for b in blocks if b["kind"] == "status")
+        self.assertIn("Thinking", status)
+        self.assertNotIn("1m17s", status)
+        self.assertNotIn("8m39s", status)
+
     def test_style_pane_keeps_two_user_pills(self):
         raw = """
      ❯ eerste bericht over ads
@@ -1942,39 +1953,28 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
             "steer",
         )
 
-    def test_classify_second_new_task_is_helper_or_queue(self):
+    def test_classify_second_new_task_is_queue(self):
         win = {"slug": "bot-a"}
         with mock.patch.object(server, "is_new_question", return_value=True):
-            with mock.patch.object(server, "helper_slots_full", return_value=False):
-                self.assertEqual(
-                    server.classify_second(win, "bouw een nieuwe landing page", "bot-a"),
-                    "helper",
-                )
-            with mock.patch.object(server, "helper_slots_full", return_value=True):
-                self.assertEqual(
-                    server.classify_second(win, "bouw een nieuwe landing page", "bot-a"),
-                    "queue",
-                )
+            self.assertEqual(
+                server.classify_second(win, "bouw een nieuwe landing page", "bot-a"),
+                "queue",
+            )
 
-    def test_busy_new_task_starts_helper(self):
+    def test_busy_new_task_queues_not_helper(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
         win = {"slug": "bot-a", "tmux": "heavy-bot-a", "id": 1}
         with mock.patch.object(server, "live_busy", return_value=True):
             with mock.patch.object(server, "is_new_question", return_value=True):
-                with mock.patch.object(server, "helper_slots_full", return_value=False):
-                    with mock.patch.object(
-                        server,
-                        "start_helper",
-                        return_value={"slug": "h--a1", "tmux": "heavy-h--a1"},
-                    ) as helper:
-                        with mock.patch.object(server, "deliver_text") as deliver:
-                            out = server.dispatch_text(win, "maak een heel ander ads plan", True)
-        helper.assert_called_once()
+                with mock.patch.object(server, "start_helper") as helper:
+                    with mock.patch.object(server, "deliver_text") as deliver:
+                        out = server.dispatch_text(win, "maak een heel ander ads plan", True)
+        helper.assert_not_called()
         deliver.assert_not_called()
-        self.assertEqual(out.get("choice"), "helper")
-        self.assertTrue(out.get("helper"))
+        self.assertEqual(out.get("choice"), "queue")
+        self.assertTrue(out.get("queued"))
         self.assertEqual(out.get("chosen_by"), "swarm")
-        self.assertEqual((rosterlib.load_roster()["agents"]["bot-a"].get("last_route") or {}).get("choice"), "helper")
+        self.assertEqual((rosterlib.load_roster()["agents"]["bot-a"].get("last_route") or {}).get("choice"), "queue")
 
     def test_busy_new_task_queues_when_helpers_full(self):
         rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
@@ -2633,6 +2633,10 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("align-items:stretch", html)
         self.assertIn("function paintSticky(", html)
         self.assertIn("function stickyPills(", html)
+        self.assertIn("#chathist{display:flex;flex-direction:column;flex:1 0 auto;min-height:100%", html)
+        self.assertIn("if(waiting || pinNext||stickBottom) pinChat(true)", html)
+        self.assertIn("function termTailUsers(", html)
+        self.assertIn("lastSticky=out.slice(0,2)", html)
         self.assertIn("function collapsePills(", html)
         self.assertIn("function splitUserItems(", html)
         self.assertIn("term-qlab", html)
@@ -2641,6 +2645,34 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("let lastSticky=[]", html)
         self.assertIn("&slug=", html)
         self.assertIn("chatKey(current)", html)
+
+    def test_device_lab_is_api_not_mouse(self):
+        src = (ROOT / "device_lab.py").read_text(encoding="utf-8")
+        self.assertIn('HOST, PORT = "127.0.0.1", 8793', src)
+        self.assertIn("Never moves the Mac mouse", src)
+        self.assertIn("def boot_android(", src)
+        self.assertIn("AVD_NAME = \"SwarmLab\"", src)
+        self.assertIn("def protocol(", src)
+        self.assertIn("def _android_running(", src)
+        self.assertIn("def _ios_crash_lines(", src)
+        self.assertIn("def _run_repo_tests(", src)
+        self.assertIn("def ship(", src)
+        self.assertIn('if (confirm or "").strip().upper() != "SUBMIT"', src)
+        self.assertIn("def audit(", src)
+        self.assertIn("def sweep(", src)
+        self.assertNotIn("desktop-harness", src)
+        self.assertIn("LAB_PORT = 8793", (ROOT / "server.py").read_text(encoding="utf-8"))
+        self.assertIn("/api/lab/", (ROOT / "server.py").read_text(encoding="utf-8"))
+        import device_lab
+
+        self.assertGreater(device_lab.contrast_ratio((0, 0, 0), (255, 255, 255)), 20)
+        self.assertLess(device_lab.contrast_ratio((40, 40, 40), (50, 50, 50)), 1.3)
+        xml = '<hierarchy><button text="Start" enabled="true"/><cell/></hierarchy>'
+        nodes = device_lab._parse_hierarchy_xml(xml)
+        self.assertTrue(any(n.get("text") == "Start" for n in nodes))
+        self.assertTrue(rosterlib.wants_lab("Apps bot"))
+        self.assertTrue(rosterlib.wants_lab("Naptara"))
+        self.assertFalse(rosterlib.wants_lab("Degero"))
 
 
 class IsolationLive(unittest.TestCase):
