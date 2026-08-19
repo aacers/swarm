@@ -782,6 +782,23 @@ class IsolationUnit(unittest.TestCase):
         rosterlib.ensure_role_memory("bot-a")
         self.assertEqual(text.count("<!-- ROLE -->"), 1)
 
+    def test_user_memory_save_is_not_overwritten_by_role_ensure(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "Degero"}}))
+        rosterlib.ensure_role_memory("bot-a")
+        custom = (
+            "# Memory\n\n<!-- ROLE -->\nMY CUSTOM ROLE\n<!-- /ROLE -->\n\n"
+            "Tim note: keep this.\n"
+        )
+        rosterlib.write_memory("bot-a", custom)
+        rosterlib.ensure_role_memory("bot-a")
+        got = rosterlib.read_memory("bot-a")
+        self.assertIn("MY CUSTOM ROLE", got)
+        self.assertIn("Tim note: keep this.", got)
+        self.assertNotIn("degero.nl", got.lower())
+        html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('"/api/agent-memory"', html)
+        self.assertIn("timeout:20000", html)
+
     def test_forgotten_bot_is_not_resyncd(self):
         rosterlib.save_roster(
             _roster({"bot-a": {"label": "A", "window_id": 1, "tmux": "heavy-bot-a", "session_id": "sid-a"}})
@@ -1323,6 +1340,38 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertNotIn("always-approve", texts)
         self.assertTrue(any(b["kind"] == "status" for b in blocks))
 
+    def test_style_pane_keeps_two_user_pills(self):
+        raw = """
+     ❯ eerste bericht over ads
+
+     ❯ en stuur ook de tweede
+
+     ⠼ Waiting for response… 2s                             2s ⇣12k [stop]
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │ ❯                                                                        │
+  ╰─────────────────────────────────────── Grok 4.6 (high) · always-approve ─╯
+"""
+        blocks = server.style_pane(raw)
+        users = [b["text"] for b in blocks if b["kind"] == "user"]
+        self.assertGreaterEqual(len(users), 2)
+        self.assertTrue(any("eerste bericht" in u for u in users))
+        self.assertTrue(any("tweede" in u for u in users))
+
+    def test_style_pane_ignores_gt_quotes(self):
+        raw = """
+     ❯ echte vraag
+
+     > dit is een quote in het antwoord
+     gewoon verder
+"""
+        blocks = server.style_pane(raw)
+        users = [b["text"] for b in blocks if b["kind"] == "user"]
+        self.assertEqual(len(users), 1)
+        self.assertIn("echte vraag", users[0])
+        self.assertFalse(any("quote" in u for u in users))
+        asst = " ".join(b["text"] for b in blocks if b["kind"] == "assistant")
+        self.assertIn("quote", asst)
+
     def test_clip_pane_keeps_streaming_reply(self):
         raw = """
      Het werkt niet goed: de UI toont een oude sessie.
@@ -1419,6 +1468,22 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn('buf = f"heavy-{uuid.uuid4().hex[:12]}"', src)
         self.assertIn("_send_lock", src)
         self.assertNotIn('"-b", "heavy"', src)
+        self.assertIn("Same text within 6s is already in.", src)
+        self.assertIn("if not text:", src)
+
+    def test_steer_second_enter_sends_now(self):
+        rosterlib.save_roster(_roster({"bot-a": {"label": "A", "tmux": "heavy-bot-a"}}))
+        win = {"slug": "bot-a", "tmux": "heavy-bot-a", "id": 1}
+        with mock.patch.object(server, "live_busy", return_value=True):
+            with mock.patch.object(server, "recently_submitted", return_value=True):
+                with mock.patch.object(server, "interrupt_chat") as stop:
+                    with mock.patch.object(server, "deliver_text") as deliver:
+                        out = server.steer_into_chat(
+                            win, "bot-a", "tweede vraag", interrupt_first=False
+                        )
+        stop.assert_not_called()
+        deliver.assert_called_once()
+        self.assertEqual(out.get("via"), "steer")
 
     def test_match_tty_uses_window_id_not_shared_words(self):
         tabs = [
@@ -2562,7 +2627,18 @@ Enter:queue | Shift+Tab:mode | Esc:cancel
         self.assertIn("#termview", html)
         self.assertIn("#turnsticky", html)
         self.assertIn("#turnsticky.on{display:flex}", html)
-        self.assertIn("function paintSticky(q)", html)
+        self.assertIn("#turnsticky{display:none;flex:0 0 auto;flex-direction:column", html)
+        self.assertIn("background:var(--sticky)", html)
+        self.assertIn("--sticky:", html)
+        self.assertIn("align-items:stretch", html)
+        self.assertIn("function paintSticky(", html)
+        self.assertIn("function stickyPills(", html)
+        self.assertIn("function collapsePills(", html)
+        self.assertIn("function splitUserItems(", html)
+        self.assertIn("term-qlab", html)
+        self.assertIn("term-qmark", html)
+        self.assertIn('i===0?"You":"Then"', html)
+        self.assertIn("let lastSticky=[]", html)
         self.assertIn("&slug=", html)
         self.assertIn("chatKey(current)", html)
 

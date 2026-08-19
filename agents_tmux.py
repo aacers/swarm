@@ -54,11 +54,21 @@ def normalize_ai(ai: str | None) -> str:
 
 
 _LOGIN_HINT = re.compile(
-    r"sign in|log in|logged out|not logged|device.?code|enter (the )?code|"
-    r"visit |open .*browser|authenticate|oauth|verification code",
+    r"sign in to (?:grok|claude|chatgpt|codex)|"
+    r"log in to (?:grok|claude|chatgpt|codex)|"
+    r"device.?code|enter (the )?code|"
+    r"visit https://auth\.|oauth device",
     re.I,
 )
 _LOGIN_CODE = re.compile(r"\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\b")
+_LOGIN_URL_OK = (
+    "auth.x.ai",
+    "claude.ai",
+    "openai.com",
+    "chatgpt.com",
+    "platform.openai.com",
+    "accounts.x.ai",
+)
 
 
 _logged_cache: dict[str, tuple[float, bool]] = {}
@@ -118,21 +128,21 @@ def login_launch_cmd(ai: str, work: Path) -> str:
 
 
 def parse_login_pane(pane: str) -> dict:
+    """Only a real CLI device-login screen — never Play Console / random https."""
     t = pane or ""
     url = ""
     for u in re.findall(r"https://[^\s>'\"\]|]+", t):
         u = u.rstrip(".,);")
         low = u.lower()
-        if any(x in low for x in ("auth", "login", "device", "oauth", "claude.ai", "openai.com", "x.ai", "google.com")):
+        if any(x in low for x in _LOGIN_URL_OK) or "/device" in low:
             url = u
             break
-        if not url:
-            url = u
     code = ""
     m = _LOGIN_CODE.search(t)
     if m:
         code = m.group(1)
-    needed = bool(url or code or _LOGIN_HINT.search(t))
+    hint = bool(_LOGIN_HINT.search(t))
+    needed = bool((url and (code or hint or "/device" in url.lower())) or (code and hint))
     return {"needed": needed, "url": url, "code": code}
 
 
@@ -454,6 +464,13 @@ def _run(args: list[str], input_bytes: bytes | None = None, timeout: float = 2) 
     )
 
 
+def stamp_slug(name: str, slug: str | None = None) -> None:
+    slug = slug or slug_of_session(name)
+    if not name or not slug:
+        return
+    _run(["set-environment", "-t", name, "SWARM_SLUG", slug])
+
+
 def pane_title(name: str) -> str:
     """Live Grok status line of this tmux pane (not the synthetic Swarm title)."""
     if not name:
@@ -562,6 +579,7 @@ def spawn(label: str | None = None, cwd: str | None = None, ai: str = "grok", mo
     r = _run(["new-session", "-d", "-s", name, "-c", str(work), cmd])
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).decode() or "tmux spawn failed")
+    stamp_slug(name, slug)
     if ai == "codex" and not login:
         time.sleep(0.5)
         dismiss_codex_trust(name)
@@ -591,6 +609,7 @@ def respawn(name: str, ai: str = "grok", cwd: str | None = None, sid: str | None
     r = _run(["respawn-pane", "-k", "-c", str(work), "-t", name, cmd])
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).decode() or "tmux respawn failed")
+    stamp_slug(name, slug)
     if ai == "codex" and not login:
         time.sleep(0.5)
         dismiss_codex_trust(name)
@@ -611,6 +630,7 @@ def kill(name: str) -> None:
 
 
 _send_lock = threading.Lock()
+_last_send: dict[str, tuple[str, float]] = {}
 
 
 def send_text(name: str, text: str, enter: bool = True) -> None:
@@ -618,7 +638,9 @@ def send_text(name: str, text: str, enter: bool = True) -> None:
 
     Enter must wait: Grok uses bracketed paste, so an Enter in the same
     tick becomes a newline in the composer instead of a send.
-    A second Enter/Escape while waiting_for_model aborts the turn.
+    A new paste while a turn is live is "Enter:send now" — send it.
+    A bare extra Enter (retry / empty) while working becomes a second
+    empty message; skip that. Same text within 6s is already in.
     """
     if not name:
         return
@@ -631,6 +653,10 @@ def send_text(name: str, text: str, enter: bool = True) -> None:
         pass
     text = (text or "").replace("\r\n", "\n").rstrip("\n\r")
     if text:
+        prev = _last_send.get(name)
+        if prev and prev[0] == text and time.time() - prev[1] < 6:
+            return
+        _last_send[name] = (text, time.time())
         payload = text.encode("utf-8")
         buf = f"heavy-{uuid.uuid4().hex[:12]}"
         with _send_lock:
@@ -645,11 +671,19 @@ def send_text(name: str, text: str, enter: bool = True) -> None:
                     pass
                 raise RuntimeError((r2.stderr or b"tmux paste failed").decode())
         time.sleep(0.35)
-    if enter:
-        time.sleep(0.2)
-        r = _run(["send-keys", "-t", name, "C-m"])
-        if r.returncode != 0:
-            raise RuntimeError((r.stderr or b"tmux enter failed").decode())
+    if not enter:
+        return
+    if not text:
+        try:
+            pane = capture_pane(name, 18)
+            if pane_busy(pane) or pane_working(pane):
+                return
+        except Exception:
+            pass
+    time.sleep(0.25)
+    r = _run(["send-keys", "-t", name, "C-m"])
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or b"tmux enter failed").decode())
 
 
 def send_keys(name: str, *keys: str) -> None:

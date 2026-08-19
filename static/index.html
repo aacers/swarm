@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui="1.8.64"><head>
+<html lang="en" data-theme="dark" data-ui="1.8.76"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -18,6 +18,7 @@
   --bg:#101218; --side:#14171f; --card:#181c26; --line:#2a2f3c; --text:#e6e8ef;
   --muted:#a7aebc; --accent:#6b64d8; --accent2:#4a78d4; --busy:#22c55e;
   --me:#5751b5; --bot:#1c202a; --botline:#2a2f3c; --row:#1b1f29; --shadow:0 10px 30px rgba(0,0,0,.35);
+  --sticky:#1c2130; --stickyline:#3d4456;
   --boss:#6b9eef;
 }
 html[data-theme=light]{
@@ -25,6 +26,7 @@ html[data-theme=light]{
   --bg:#e6e7ed; --side:#eef0f4; --card:#f0f1f5; --line:#d4d7e0; --text:#1c1e26;
   --muted:#5c6370; --accent:#5b54d4; --accent2:#3d78e0; --busy:#15803d;
   --me:#5b54d4; --bot:#eef0f4; --botline:#d4d7e0; --row:#e3e5ec; --shadow:0 10px 30px rgba(20,22,30,.07);
+  --sticky:#f4f5f9; --stickyline:#c5cad6;
   --boss:#1d4ed8;
 }
 @media (min-width:900px){
@@ -215,12 +217,19 @@ html[data-theme=light] .row:hover{border-color:#b7bcc8}
 #chatlog .empty{margin:auto;text-align:center;align-self:center}
 #chatlog .msg{margin:0 0 5px}
 #chatlog .msg.user{align-self:flex-end;margin-left:auto;margin-right:0;margin-bottom:5px}
-#chatlog > .daychip:first-child,
-#chatlog > .msg:first-child,
-#chatlog > .msg.user:first-child,
-#chatlog > .msg.file:first-child,
-#chatlog > .msg.fwd:first-child,
-#chatlog > .msg.progress:first-child{margin-top:auto}
+#chatlog.termish > .daychip:first-child,
+#chatlog.termish > .msg:first-child{margin-top:0}
+#chatlog:not(.termish) > .daychip:first-child,
+#chatlog:not(.termish) > .msg:first-child,
+#chatlog:not(.termish) > .msg.user:first-child,
+#chatlog:not(.termish) > .msg.file:first-child,
+#chatlog:not(.termish) > .msg.fwd:first-child,
+#chatlog:not(.termish) > .msg.progress:first-child{margin-top:auto}
+#turnsticky{display:none;flex:0 0 auto;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:0;width:100%;padding:8px 16px 10px;background:var(--sticky);border-bottom:1px solid var(--stickyline);box-shadow:0 6px 14px rgba(0,0,0,.22);z-index:8}
+#turnsticky.on{display:flex}
+#turnsticky .term-user{margin:0;max-width:100%;width:100%;align-self:stretch;padding:8px 0}
+#turnsticky.many .term-user + .term-user{border-top:1px solid var(--line);margin-top:2px;padding-top:10px}
+#termview{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%;padding:2px 0 10px}
 .bubble.tool{display:none}
 #live{display:none;flex:0 0 auto;align-self:flex-start;width:auto;margin:0 16px 8px;padding:6px 10px;background:linear-gradient(180deg,#163024 0%,#121a16 100%);border:1px solid rgba(74,222,128,.38);border-radius:999px;box-sizing:border-box}
 html[data-theme=light] #live{background:linear-gradient(180deg,#f0fdf4 0%,#ecfdf3 100%);border-color:rgba(22,163,74,.3)}
@@ -241,6 +250,24 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
 .msg.progress .bubble{background:var(--bot);border:1px solid var(--botline);border-radius:18px;color:var(--text);font-size:15px;font-weight:550;padding:10px 14px;text-align:left;line-height:1.4}
 .msg.progress .bubble .dots3{display:none}
 .msg.progress .acts,.msg.progress .when{display:none}
+.term-user{align-self:stretch;width:100%;max-width:100%;background:transparent;color:var(--text);border-radius:0;padding:2px 0;text-align:left}
+.term-qlab{display:block;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
+.term-qrow{display:flex;align-items:flex-start;gap:10px;width:100%}
+.term-qmark{flex:0 0 auto;color:var(--accent2);font-weight:800;font-size:16px;line-height:1.45}
+.term-qtext{flex:1;min-width:0;color:var(--text);font-weight:650;font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left}
+#chatlog.termish .msg.user{align-self:stretch;align-items:stretch;width:100%;max-width:100%;margin-left:0;margin-right:0}
+#chatlog.termish .msg.user .bubble.user{align-self:stretch;width:100%;max-width:100%;background:transparent;color:var(--text);border-radius:0;padding:8px 0 8px 0;text-align:left;font-weight:650}
+#chatlog.termish .msg.user .bubble.user::before{content:"❯ ";color:var(--accent2);font-weight:800}
+.term-asst{align-self:flex-start;max-width:min(92%,100%);background:var(--bot);border:1px solid var(--botline);border-radius:18px;padding:12px 16px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;line-height:1.45}
+.term-think{align-self:stretch;color:var(--muted);font-size:14px;line-height:1.45;padding:8px 12px;border-left:3px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}
+.term-tool{align-self:flex-start;font-size:13px;font-weight:650;color:var(--muted);background:var(--row);border:1px solid var(--line);border-radius:999px;padding:6px 12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.term-status{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;background:#ecfdf3;color:#166534;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:650;max-width:100%}
+.term-status .dots3{display:inline-flex;gap:3px}
+.term-status .dots3 i{width:5px;height:5px;border-radius:50%;background:#16a34a;animation:dot 1s ease-in-out infinite}
+.term-status .dots3 i:nth-child(2){animation-delay:.15s}
+.term-status .dots3 i:nth-child(3){animation-delay:.3s}
+[data-theme=dark] .term-status{background:#14532d;color:#bbf7d0}
+[data-theme=dark] .term-status .dots3 i{background:#4ade80}
 .msg.file{align-self:flex-end;align-items:flex-end;max-width:min(72%,100%)}
 .filecard{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.12);background:var(--me);color:#eef0f8;border-radius:16px;padding:8px 12px;font-size:13px;font-weight:700;max-width:100%}
 .filecard .fico{flex:0 0 auto;opacity:.9;font-size:15px}
@@ -462,6 +489,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
   .msg.user{max-width:min(86%,100%);width:-webkit-fit-content;width:fit-content;align-self:flex-end;margin-left:auto;margin-right:0;margin-bottom:5px}
   .msg.bezig .bezig-thought{max-width:100%}
   #chatlog{padding:6px 12px 6px}
+  #turnsticky{padding:8px 12px}
   #live{margin:0 12px 8px;padding:5px 9px;border-radius:999px}
   #liveact{font-size:13px}
   #livedetail,#liveonwrap,#liveon,#liveq{display:none !important}
@@ -526,6 +554,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
       </div>
       <div id="loginbar"></div>
       <div id="chat">
+        <div id="turnsticky"></div>
         <div id="chatlog"><div class="empty" id="empty"><h2>Swarm</h2><div>Tap <b>+ Bot</b> (top) to start.<br>Then type below.<br>On iPhone: swipe to close.</div></div></div>
       </div>
       <div id="live"><div class="lbar"><span class="llive"><span class="dots3"><i></i><i></i><i></i></span></span></div><div id="liveact"></div><span class="wtime" id="livetime"></span></div>
@@ -576,7 +605,8 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
         <div class="perm"><div><b>Control terminals</b><div class="st">send messages to Grok agents</div></div><button class="toggle on" data-k="terminals"><i></i></button></div>
         <div class="perm"><div><b>New agent</b><div class="st">plus button opens a new agent</div></div><button class="toggle on" data-k="new_terminal"><i></i></button></div>
         <div class="perm"><div><b>Browser</b><div class="st">open from chat, tap the page to control</div></div><button class="toggle on" data-k="browser"><i></i></button></div>
-        <div class="perm"><div><b>Huddle</b><div class="st">agents may message each other</div></div><button class="toggle on" data-k="overleg"><i></i></button></div>
+        <div class="perm"><div><b>Huddle</b><div class="st">you send work to another chat — bots do not chat with each other</div></div><button class="toggle on" data-k="overleg"><i></i></button></div>
+        <div class="perm"><div><b>Loops at night</b><div class="st">ASO, mail and SEO loops may run 23:00–07:00</div></div><button class="toggle" data-k="loops_night"><i></i></button></div>
         <div class="perm"><div><b>Push notifications</b><div class="st">phone alert when a bot looks done — off by default</div></div><button class="toggle" data-k="push"><i></i></button></div>
         <div class="perm"><div><b>Keep screen on</b><div class="st">iPhone stays awake while Swarm is open, so you can watch the chat</div></div><button class="toggle on" data-k="awake"><i></i></button></div>
         <div class="perm"><div><b>Auto</b><div class="st">hands-free in the car — CEO talks back, you speak the next job</div></div><button class="toggle" data-k="drive"><i></i></button></div>
@@ -624,7 +654,7 @@ html[data-theme=light] #live .lbar .dots3 i{background:#16a34a}
     <div class="loop-hint">Save keeps this loop. Or tap below to add another.</div>
     <button type="button" id="loopadd">Add loop</button>
   </div>
-  <button class="sav" id="asetsave">Save</button>
+  <button type="button" class="sav" id="asetsave">Save</button>
   <button type="button" class="danger" id="asetdel">Delete bot</button>
 </div></div>
 <div id="voice"><div class="vinner">
@@ -1138,6 +1168,45 @@ function noteBusyFlip(list){
     const settled=!raw && idleAt[id] && Date.now()-idleAt[id]>=2800;
     if(was===true && settled){
       const on=current && chatKey(current)===id;
+      const msgs=(chatCache[id]&&chatCache[id].messages)||[];
+      let lastUser="", lastAsst="";
+      for(let i=msgs.length-1;i>=0;i--){
+        const m=msgs[i];
+        if(!m) continue;
+        const t=String(m.text||"").trim();
+        if(!t) continue;
+        if(!lastAsst && m.role==="assistant") lastAsst=t;
+        if(!lastUser && m.role==="user") lastUser=t;
+        if(lastAsst && lastUser) break;
+      }
+      const loopTick=/^\[Loop ·/i.test(lastUser);
+      const ghPush=lastAsst.match(/SWARM_GH_PUSH:\s*(.+)/);
+      if(loopTick && !ghPush){
+        prevBusy[id]=false;
+        delete idleAt[id];
+        return;
+      }
+      if(ghPush){
+        const body=String(ghPush[1]||"").replace(/\s+/g," ").slice(0,180);
+        if(!on){
+          unread[id]={at:Date.now()};
+          saveUnread();
+        }
+        toast("Swarm GitHub · "+body, 6000);
+        (async()=>{
+          try{
+            if(!window.Notification) return;
+            let perm=Notification.permission;
+            if(perm==="default") perm=await Notification.requestPermission();
+            if(perm==="granted"){
+              new Notification("Swarm · new GitHub user", {body, tag:"swarm-gh", silent:false});
+            }
+          }catch{}
+        })();
+        prevBusy[id]=false;
+        delete idleAt[id];
+        return;
+      }
       if(!on){
         unread[id]={at:Date.now()};
         saveUnread();
@@ -1345,6 +1414,9 @@ function selectAgent(id, slug){
   inboxSig="";
   lastCrew=[];
   lastQueue=[];
+  lastTerm=[];
+  lastSticky=[];
+  paintSticky(false);
   paintQueue([]);
   const local=pending[want]||[];
   const cached=chatCache[want]||[];
@@ -1629,29 +1701,157 @@ function msgHtml(m,i){
   }
   return `<div class="msg ${m.role}"><div class="bubble ${m.role}${m.meta?" "+m.meta:""}">${fmtBubble(m.text)}</div>${whenHtml}${acts}</div>`;
 }
-function renderBubbles(msgs, extraWait, id){
-  if(id!=null && (!current || !sameChat(current, id))) return;
-  const el=chatLog();
-  const waiting=!justStopped(current) && !!(extraWait || (current && showBusy(current)) || turnOpen(msgs));
-  const shown=foldTurns(msgs||[], waiting);
-  const key=String(id||(current&&current.id)||"")+"|"+(waiting?"w":"d")+"|"+shown.length+"|"+shown.map(m=>(m.role||"")+":"+(m.at||"")+":"+(m.text||"").length+":"+(m.text||"").slice(-40)).join("\n");
-  if(key===lastChatKey && el.querySelector(".bubble,.msg,.fwd-head")){ sizeChatEnd(); paintWait(); parkLive(); paintJump(); return; }
-  if(lastChatKey && !stickBottom && shown.length){
-    const prev=lastChatKey.split("|")[2];
-    const was=Number(prev||0);
-    if(shown.length>was) missedNew+=shown.length-was;
+let lastTerm=[];
+let lastSticky=[];
+function termSig(term){
+  return (term||[]).map(b=>(b.kind||"")+":"+String(b.text||"").length+":"+String(b.text||"").slice(-48)).join("\n");
+}
+function termBodyHtml(term){
+  const rows=term||[];
+  const lastStatus=[...rows].reverse().find(b=>b.kind==="status");
+  let html="";
+  rows.forEach(b=>{
+    const k=b.kind||"assistant";
+    if(k==="user") return;
+    const text=esc(b.text||"");
+    if(k==="status"){
+      if(b!==lastStatus) return;
+      const live=!/worked for/i.test(b.text||"");
+      html+=`<div class="term-status">${live?'<span class="dots3"><i></i><i></i><i></i></span>':""}<span>${text}</span></div>`;
+    }else if(k==="tool"){
+      html+=`<div class="term-tool">${text}</div>`;
+    }else if(k==="think"){
+      html+=`<div class="term-think">${text}</div>`;
+    }else{
+      html+=`<div class="term-asst">${text}</div>`;
+    }
+  });
+  return html;
+}
+function termUsers(term){
+  const out=[];
+  const seen=new Set();
+  (term||[]).forEach(b=>{
+    if((b.kind||"")!=="user") return;
+    const t=String(b.text||"").trim();
+    if(!t) return;
+    const n=normMsg(t);
+    if(!n||seen.has(n)) return;
+    seen.add(n);
+    out.push(t);
+  });
+  return out;
+}
+function openTurnUsers(msgs){
+  const tail=[];
+  const list=msgs||[];
+  for(let i=list.length-1;i>=0;i--){
+    const m=list[i];
+    if(!m||m.helper||m.meta==="file"||m.meta==="progress"||m.meta==="tool") continue;
+    if(m.role==="user"){
+      const t=String(m.text||"").trim();
+      if(t) tail.push(t);
+      continue;
+    }
+    if(m.role==="assistant" && String(m.text||"").trim()) break;
   }
-  lastChatKey=key;
-  parkLive();
-  if(!shown.length && !waiting){
-    el.innerHTML=`<div class="empty"><h2>${esc(current?labelOf(current):"Bot")}</h2><div>No messages yet. Type below.</div></div>`;
-    paintWait();
-    paintJump();
+  tail.reverse();
+  return tail;
+}
+function splitUserItems(text){
+  const t=String(text||"").trim();
+  if(!t) return [];
+  const labeled=t.split(/\n(?=\[[^\]]+\]:)/).map(s=>s.trim()).filter(Boolean);
+  if(labeled.length>1) return labeled;
+  return [t];
+}
+function collapsePills(list){
+  const out=[];
+  (list||[]).forEach(t=>{
+    t=String(t||"").trim();
+    if(!t) return;
+    const n=normMsg(t);
+    const i=out.findIndex(x=>{
+      const xn=normMsg(x);
+      return xn===n || xn.startsWith(n) || n.startsWith(xn);
+    });
+    if(i<0) out.push(t);
+    else if(t.length>out[i].length) out[i]=t;
+  });
+  return out;
+}
+function stickyPills(msgs, term, extra){
+  const raw=[];
+  const seen=new Set();
+  function add(t){
+    t=String(t||"").trim();
+    if(!t) return;
+    const n=normMsg(t);
+    if(!n||seen.has(n)) return;
+    seen.add(n);
+    raw.push(t);
+  }
+  termUsers(term).forEach(add);
+  openTurnUsers(msgs).forEach(add);
+  (lastSticky||[]).forEach(add);
+  if(extra!=null && extra!==false){
+    (Array.isArray(extra)?extra:[extra]).forEach(add);
+  }
+  const out=[];
+  collapsePills(raw).forEach(t=>splitUserItems(t).forEach(x=>{
+    if(x && !out.some(y=>normMsg(y)===normMsg(x))) out.push(x);
+  }));
+  const inTerm=new Set(termUsers(term).map(normMsg));
+  lastSticky=out.filter(t=>!inTerm.has(normMsg(t)) && ![...inTerm].some(n=>n.startsWith(normMsg(t))||normMsg(t).startsWith(n))).slice(-4);
+  return out.slice(-4);
+}
+function dropSticky(text){
+  const n=normMsg(text);
+  lastSticky=(lastSticky||[]).filter(t=>normMsg(t)!==n);
+  paintSticky();
+}
+function historyOffTerm(msgs, term, qs){
+  const blob=(term||[]).map(b=>String(b.text||"").toLowerCase()).join("\n");
+  const qset=new Set((Array.isArray(qs)?qs:[qs]).map(x=>normMsg(x)).filter(Boolean));
+  return (msgs||[]).filter(m=>{
+    if(!m||m.helper||m.meta==="progress"||m.meta==="tool") return false;
+    if(isToolNoise(m)) return false;
+    if(m.role==="user" && qset.has(normMsg(m.text))) return false;
+    const t=normMsg(m.text).slice(0,32);
+    if(!t) return false;
+    return !blob || blob.indexOf(t)<0;
+  });
+}
+function paintSticky(extra){
+  const el=$("turnsticky");
+  if(!el) return;
+  if(extra===false){
+    lastSticky=[];
+    el.classList.remove("on","many");
+    el.innerHTML="";
     return;
   }
+  const dest=current?chatKey(current):"";
+  const msgs=dest?(chatCache[dest]||[]).concat(pending[dest]||[]):[];
+  const pills=Array.isArray(extra)?extra.filter(t=>String(t||"").trim()):stickyPills(msgs, lastTerm, extra);
+  if(!pills.length){
+    el.classList.remove("on","many");
+    el.innerHTML="";
+    return;
+  }
+  const html=pills.map((t,i)=>{
+    const lab=pills.length>1?(i===0?"You":"Then"):"You";
+    return `<div class="term-user"><span class="term-qlab">${lab}</span><div class="term-qrow"><span class="term-qmark" aria-hidden="true">❯</span><span class="term-qtext">${esc(t)}</span></div></div>`;
+  }).join("");
+  el.classList.toggle("many", pills.length>1);
+  if(el.classList.contains("on") && el.innerHTML===html) return;
+  el.classList.add("on");
+  el.innerHTML=html;
+}
+function histHtml(shown){
   let html="";
   let lastDay="";
-  shown.forEach((m,i)=>{
+  (shown||[]).forEach((m,i)=>{
     let ms=parseAt(m);
     const today=dayKey(Date.now());
     if(!ms && lastDay && lastDay!==today) ms=Date.now();
@@ -1663,8 +1863,50 @@ function renderBubbles(msgs, extraWait, id){
     }
     html+=msgHtml(m,i);
   });
-
-  el.innerHTML=html;
+  return html;
+}
+function renderBubbles(msgs, extraWait, id){
+  if(id!=null && (!current || !sameChat(current, id))) return;
+  const el=chatLog();
+  const waiting=!justStopped(current) && !!(extraWait || (current && showBusy(current)) || turnOpen(msgs));
+  const term=lastTerm||[];
+  const pills=stickyPills(msgs, term);
+  const shown=term.length?historyOffTerm(foldTurns(msgs||[], false), term, pills):foldTurns(msgs||[], waiting);
+  const body=termBodyHtml(term);
+  const key=String(id||(current&&current.id)||"")+"|"+(waiting?"w":"d")+"|"+shown.length+"|"+shown.map(m=>(m.role||"")+":"+(m.at||"")+":"+(m.text||"").length+":"+(m.text||"").slice(-40)).join("\n")+"|"+termSig(term)+"|"+pills.map(normMsg).join("\n");
+  if(key===lastChatKey && el.querySelector(".bubble,.msg,.fwd-head,#termview,#turnsticky")){ sizeChatEnd(); paintWait(); parkLive(); paintJump(); return; }
+  if(lastChatKey && !stickBottom && shown.length){
+    const prev=lastChatKey.split("|")[2];
+    const was=Number(prev||0);
+    if(shown.length>was) missedNew+=shown.length-was;
+  }
+  lastChatKey=key;
+  parkLive();
+  if(!shown.length && !term.length && !pills.length && !waiting){
+    el.classList.remove("termish");
+    el.innerHTML=`<div class="empty"><h2>${esc(current?labelOf(current):"Bot")}</h2><div>No messages yet. Type below.</div></div>`;
+    paintWait();
+    paintJump();
+    return;
+  }
+  paintSticky(pills);
+  const feed=`<div id="termview">${body}</div>`;
+  const hist=histHtml(shown);
+  const view=el.querySelector("#termview");
+  const histEl=el.querySelector("#chathist");
+  el.classList.toggle("termish", !!(term.length || pills.length));
+  if(view && histEl){
+    if(histEl.innerHTML!==hist) histEl.innerHTML=hist;
+    if(view.innerHTML!==body) view.innerHTML=body;
+    chatCopySrc=shown;
+    sizeChatEnd();
+    parkLive();
+    paintWait();
+    if(pinNext||stickBottom) pinChat(true);
+    else paintJump();
+    return;
+  }
+  el.innerHTML=`<div id="chathist">${hist}</div>${term.length||pills.length?feed:""}`;
   chatCopySrc=shown;
   sizeChatEnd();
   parkLive();
@@ -1838,6 +2080,11 @@ function paintChatBusy(){
   const helper=openJob&&openJob.kind==="agent"?crewHelpers().find(c=>String(c.id)===String(openJob.id)):null;
   const watchHelper=!!(helper&&helper.busy);
   const key=current?busyKey(current):"";
+  if(lastTerm && lastTerm.length){
+    live.classList.remove("on","dump","has-detail","has-on","has-q");
+    ["liveact","livedetail","liveon","liveq"].forEach(id=>{ const el=$(id); if(el) el.textContent=""; });
+    return;
+  }
   const want=watchHelper || !!(current && showBusy(current) && !justStopped(current) && !(openJob&&openJob.kind==="queue"));
   if(want && key) liveHold[key]=Date.now()+1200;
   const on=!!(want || (key && Date.now()<(liveHold[key]||0)));
@@ -1924,12 +2171,14 @@ function paintLogin(){
   const name=aiLabel(L.ai||aiOf(current));
   const url=L.url||"";
   const code=L.code||"";
-  el.classList.add("on");
-  el.innerHTML=`<b>Sign in to ${esc(name)}</b>
+  const html=`<b>Sign in to ${esc(name)}</b>
     ${url?`<a href="${esc(url)}" target="_blank" rel="noopener">Open login page</a>`:""}
     ${code?`<div class="code" id="logincode">${esc(code)}</div>`:""}
     <div>${esc(L.hint||"Finish login on this phone, then tap Done.")}</div>
     <div class="rowbtns"><button type="button" id="logindone">Done — start bot</button></div>`;
+  if(el.classList.contains("on") && el.innerHTML===html) return;
+  el.classList.add("on");
+  el.innerHTML=html;
 }
 if($("loginbar")) $("loginbar").onclick=async ev=>{
   if(ev.target.id==="logincode"){
@@ -2199,6 +2448,7 @@ async function loadChat(want, tok){
     if(!chatStill(want, tok)) return;
     if(d.slug && wantSlug && d.slug!==wantSlug) return;
     if(!d.slug && d.for_id!=null && current && String(d.for_id)!==String(current.id)) return;
+    if(Array.isArray(d.term)) lastTerm=d.term;
     applyChatState(d, want);
     if(d.route && d.route.choice==="steer" && d.route.text && current && chatKey(current)===String(want) && !lastSteered && midTurn(current)){
       lastSteered={chat:want, text:d.route.text, by:d.route.chosen_by||"swarm", at:Date.now()};
@@ -2532,8 +2782,11 @@ if($("steerbar")){
     await handlePaste(ev);
   }, true);
 })();
+let lastSendAt=0;
 $("composer").onsubmit=async ev=>{
   ev.preventDefault(); if(!current||sending) return;
+  if(Date.now()-lastSendAt<700) return;
+  lastSendAt=Date.now();
   const box=$("typebox"); let text=box.value.trim(); if(!text) return;
   if(isStopCmd(text)){
     box.value="";
@@ -2550,6 +2803,7 @@ $("composer").onsubmit=async ev=>{
   }
   sending=true; box.value="";
   pending[dest]=pending[dest]||[];
+  paintSticky(text);
   if(looksLeak(text)){
     try{
       const sent=await api("/api/type",{method:"POST",body:JSON.stringify(typePayload(destWin,text,true))});
@@ -2593,10 +2847,12 @@ $("composer").onsubmit=async ev=>{
         if(asPill) placeSteer(text);
       }else if(choice==="helper"){
         lastSteered=null;
+        dropSticky(text);
         const hid=sent.item && (sent.item.slug||sent.item.id||sent.item.tmux);
         if(hid) openJob={kind:"agent", id:String(hid)};
       }else{
         lastSteered=null;
+        dropSticky(text);
         const nid=sent.item&&sent.item.id;
         if(nid) openJob={kind:"queue", id:String(nid)};
       }
@@ -2842,9 +3098,11 @@ $("botset").onclick=async()=>{
       api("/api/agent-memory?slug="+encodeURIComponent(slug)),
       api("/api/loop?slug="+encodeURIComponent(slug)).catch(()=>null)
     ]);
-    $("asetmem").value=mem.text||"";
+    if($("asetmem") && (document.activeElement!==$("asetmem") || $("asetmem").value==="loading…")){
+      $("asetmem").value=mem.text||"";
+    }
     if(loops && loops.loops) applyLoops(loops.loops);
-  }catch{ $("asetmem").value=""; }
+  }catch{ if($("asetmem") && $("asetmem").value==="loading…") $("asetmem").value=""; }
 };
 function loopDraft(){
   return {
@@ -3020,12 +3278,14 @@ $("asetsave").onclick=async()=>{
   const model=(($("asetmodel")||{}).querySelector && $("asetmodel").querySelector("button.on")||{}).dataset?.model||"";
   const draft=loopDraft();
   if(draft.prompt && (!draft.n||draft.n<1)){toast("pick an interval");return}
+  const mem=($("asetmem")&&$("asetmem").value)||"";
   try{
-    const d=await api("/api/bot",{method:"POST",body:JSON.stringify({
+    await api("/api/agent-memory",{method:"POST",timeout:20000,body:JSON.stringify({slug,text:mem})});
+    const d=await api("/api/bot",{method:"POST",timeout:20000,body:JSON.stringify({
       slug, name, icon, color, ai, model,
       ceo: $("asetceo").classList.contains("on"),
       home: $("asethome")?$("asethome").classList.contains("on"):false,
-      text: $("asetmem").value,
+      text: mem,
       loop_name: draft.prompt?draft.name:"",
       loop_prompt: draft.prompt,
       n: draft.n,
@@ -3543,6 +3803,7 @@ function paintToggles(){
     if(t.dataset.k==="theme"){ t.classList.toggle("on", settings.theme==="dark"); return; }
     if(t.dataset.k==="push"){ t.classList.toggle("on", settings.push===true); return; }
     if(t.dataset.k==="drive"){ t.classList.toggle("on", settings.drive===true); return; }
+    if(t.dataset.k==="loops_night"){ t.classList.toggle("on", settings.loops_night===true); return; }
     if(t.dataset.k==="awake"){ t.classList.toggle("on", settings.awake!==false); return; }
     const on=settings[t.dataset.k]!==false;
     t.classList.toggle("on",on);

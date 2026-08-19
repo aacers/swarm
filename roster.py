@@ -199,11 +199,15 @@ def memory_path(slug: str) -> Path:
 
 
 def read_memory(slug: str) -> str:
-    return memory_path(slug).read_text(encoding="utf-8")
+    path = memory_path(slug)
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def write_memory(slug: str, text: str) -> None:
-    memory_path(slug).write_text(text, encoding="utf-8")
+    d = agent_dir(slug)
+    (d / "memory.md").write_text(text if text is not None else "", encoding="utf-8")
     add_event(slug, "memory", "memory updated")
 
 
@@ -289,6 +293,8 @@ def ensure_role_memory(slug: str, meta: dict | None = None, roster: dict | None 
     path = memory_path(slug)
     agent_dir(slug)
     cur = path.read_text(encoding="utf-8") if path.exists() else f"# Memory · {slug}\n"
+    if ROLE_START in cur and ROLE_END in cur:
+        return
     card = role_card(slug, meta, roster)
     nxt = upsert_marked_block(cur, ROLE_START, ROLE_END, card)
     if nxt != cur:

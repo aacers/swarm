@@ -58,7 +58,7 @@ TOKEN_FILE = STATE_DIR / "token"
 URL_FILE = STATE_DIR / "url.txt"
 GROK_AUTH = Path.home() / ".grok" / "auth.json"
 BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-VERSION = "1.8.73"
+VERSION = "1.8.76"
 TTS_VOICE = "eve"
 TTS_CACHE = STATE_DIR / "tts-cache"
 STABLE_PUB = "https://bumblly.com/s"  # Tim's tunnel; clones use LAN unless public-url.txt is set
@@ -3083,7 +3083,7 @@ _TERM_STATUS = re.compile(
 )
 _TERM_TOOL = re.compile(r"^[◆◈●❙]\s*")
 _TERM_THINK = re.compile(r"^[┃│]\s+")
-_TERM_USER = re.compile(r"^[❯>|]\s*")
+_TERM_USER = re.compile(r"^❯\s*")
 _TERM_SKIP = re.compile(
     r"(?i)always[- ]?approve|enter:(queue|send)|shift\+tab|esc:cancel|ctrl\+[a-z;]|"
     r"grok\s+\d|auto-approve|type a message|queued\s*$|"
@@ -3147,7 +3147,7 @@ def style_pane(raw: str) -> list[dict]:
         if _TERM_TOOL.match(bare) or _TERM_TOOL.match(s):
             add("tool", _TERM_TOOL.sub("", bare).strip())
             continue
-        if _TERM_USER.match(s) or _TERM_USER.match(bare) or s.lstrip().startswith("❯"):
+        if _TERM_USER.match(s) or _TERM_USER.match(bare) or bare.startswith("❯") or s.lstrip().startswith("❯"):
             add("user", _TERM_USER.sub("", bare).strip())
             continue
         if kind == "user":
@@ -6820,17 +6820,15 @@ def make_handler(app: App):
                         except Exception:
                             pass
                     extra = {}
-                    next_ai = rosterlib.normalize_ai(str(want_ai) if want_ai is not None else prev_ai)
-                    next_model = rosterlib.normalize_model(next_ai, want_model if want_model is not None else prev_model)
-                    if next_ai != prev_ai or next_model != prev_model:
-                        extra = switch_bot_ai(slug, next_ai, next_model, force=True)
-                    elif want_ai is not None:
-                        extra = switch_bot_ai(slug, next_ai, next_model)
                     if "text" in body:
                         text = str(body.get("text") or "")
                         if len(text) > 200_000:
                             raise RuntimeError("memory too large")
                         rosterlib.write_memory(slug, text)
+                    next_ai = rosterlib.normalize_ai(str(want_ai) if want_ai is not None else prev_ai)
+                    next_model = rosterlib.normalize_model(next_ai, want_model if want_model is not None else prev_model)
+                    if next_ai != prev_ai or next_model != prev_model:
+                        extra = switch_bot_ai(slug, next_ai, next_model, force=True)
                     loop_prompt = str(body.get("loop_prompt") or "").strip()
                     if loop_prompt:
                         raw_iv = str(body.get("interval") or "").strip()

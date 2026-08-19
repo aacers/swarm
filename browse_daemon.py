@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""In-app browser. Playwright stays on one thread; UI talks HTTP."""
+"""In-app browser. One Chrome per bot; commands run in parallel."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import base64
 import json
 import os
 import queue
+import shutil
+import sys
 import re
 import subprocess
 import tempfile
@@ -17,18 +19,141 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from browse_ids import DEFAULT_BOT, detect_bot, normalize_bot, profile_dir
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from browse_ids import DEFAULT_BOT, normalize_bot, profile_dir  # noqa: E402
+
+_FOCUS_JS = """() => {
+  const el = document.activeElement;
+  if (!el || el === document.body || el === document.documentElement) return {editable: false};
+  const t = (el.tagName || '').toLowerCase();
+  const typ = (el.getAttribute('type') || '').toLowerCase();
+  const skip = ['button','submit','checkbox','radio','file','hidden','image','reset','range','color'];
+  const editable = !!(el.isContentEditable
+    || t === 'textarea'
+    || t === 'select'
+    || (t === 'input' && skip.indexOf(typ) < 0)
+    || el.closest('[contenteditable="true"],[contenteditable=""]'));
+  return {editable, tag: t, type: typ};
+}"""
+
+
+def _focus_info(page) -> dict:
+    try:
+        return page.evaluate(_FOCUS_JS) or {}
+    except Exception:
+        return {}
+
+
+def _selected_text(page) -> str:
+    try:
+        return str(page.evaluate("() => window.getSelection ? window.getSelection().toString() : ''") or "")
+    except Exception:
+        return ""
+
+
+def _clean_cookies(raw) -> list:
+    out = []
+    for c in raw or []:
+        if not isinstance(c, dict) or not c.get("name"):
+            continue
+        d = {
+            k: c[k]
+            for k in ("name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite")
+            if k in c
+        }
+        if d.get("sameSite") not in {"Strict", "Lax", "None"}:
+            d["sameSite"] = "Lax"
+        if d.get("expires") in (-1, None, 0):
+            d.pop("expires", None)
+        out.append(d)
+    return out
+
+
+def _inherit_shared_auth(page, slug: str) -> int:
+    if slug == DEFAULT_BOT:
+        return 0
+    try:
+        url = page.url or ""
+    except Exception:
+        url = ""
+    if url and url != "about:blank" and "accounts.google.com" not in url:
+        return 0
+    src = _existing(DEFAULT_BOT)
+    if not src:
+        return 0
+    try:
+        got = src.call("state", timeout=6)
+        cookies = _clean_cookies((got.get("out") or {}).get("cookies") or [])
+        if not cookies:
+            return 0
+        page.context.add_cookies(cookies)
+        return len(cookies)
+    except Exception:
+        return 0
+
+
+def seed_profile(slug: str, force: bool = False) -> None:
+    """Copy Google/Play login from the shared Chrome profile onto a new bot profile."""
+    if slug == DEFAULT_BOT:
+        return
+    src = profile_dir(DEFAULT_BOT)
+    dest = profile_dir(slug)
+    marker = dest / ".seeded-from-shared"
+    if marker.exists() and not force:
+        return
+    if not (src / "Default").exists():
+        return
+    dest.mkdir(parents=True, exist_ok=True)
+    skip = {
+        "SingletonLock",
+        "SingletonCookie",
+        "SingletonSocket",
+        "lockfile",
+        "RunningChromeVersion",
+        "Cache",
+        "Code Cache",
+        "GPUCache",
+        "GrShaderCache",
+        "ShaderCache",
+        "DawnCache",
+    }
+    for name in ("Local State", "First Run"):
+        sp = src / name
+        if sp.is_file():
+            try:
+                shutil.copy2(sp, dest / name)
+            except Exception:
+                pass
+    src_def, dest_def = src / "Default", dest / "Default"
+    if dest_def.exists() and (force or not marker.exists()):
+        try:
+            shutil.rmtree(dest_def)
+        except Exception:
+            return
+    if not dest_def.exists():
+        try:
+            shutil.copytree(src_def, dest_def, ignore=shutil.ignore_patterns(*skip))
+        except Exception:
+            return
+    try:
+        marker.touch()
+    except Exception:
+        pass
+
 
 PROFILE = Path.home() / ".grok" / "browser" / "profile"
 DOWNLOADS = Path.home() / ".grok" / "browser" / "downloads"
 HOST, PORT = "127.0.0.1", 8791
 MAX_LIVE = 10
 IDLE_SEC = 40 * 60
-SHOT_TTL = 0.45
+SHOT_TTL = 0.25
 
 WATCH_CMDS = {"open", "click", "type", "key", "back", "sel", "read", "scroll", "eval", "files"}
 # read/eval are text-first — skip the JPEG so bots don't wait on screenshots.
-SNAP_CMDS = {"open", "click", "type", "key", "back", "sel", "scroll", "files"}
+SNAP_CMDS = {"open", "click", "type", "key", "back", "sel", "scroll", "files", "mouse"}
 
 
 _pool_lock = threading.Lock()
@@ -55,6 +180,7 @@ class BotBrowser:
             "at": 0.0,
             "shot_n": 0,
             "shot_at": 0.0,
+            "want_shot": False,
         }
         self.last_shot = b""
         self.last_shot_at = 0.0
@@ -94,6 +220,10 @@ class BotBrowser:
                 self.state["title"] = title
             self.state["ok"] = True
 
+    def request_shot(self) -> None:
+        with self.lock:
+            self.state["want_shot"] = True
+
     def call(self, cmd: str, args: dict | None = None, timeout: float = 30):
         ev = threading.Event()
         box: dict = {}
@@ -107,6 +237,7 @@ class BotBrowser:
     def worker(self) -> None:
         profile = profile_dir(self.slug)
         profile.mkdir(parents=True, exist_ok=True)
+        seed_profile(self.slug)
         pw = sync_playwright().start()
         ctx = None
         page = None
@@ -148,6 +279,10 @@ class BotBrowser:
                     "--no-first-run",
                     "--no-default-browser-check",
                     "--disable-features=Translate,MediaRouter,DialMediaRouteProvider",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-ipc-flooding-protection",
                     f"--window-size=1280,860",
                     f"--window-position={x},{y}",
                     "--hide-crash-restore-bubble",
@@ -166,10 +301,11 @@ class BotBrowser:
                 pass
             page = ctx.pages[-1] if ctx.pages else ctx.new_page()
             try:
-                page.set_default_timeout(12000)
-                page.set_default_navigation_timeout(20000)
+                page.set_default_timeout(4000)
+                page.set_default_navigation_timeout(12000)
             except Exception:
                 pass
+            _inherit_shared_auth(page, self.slug)
             return page
 
         def snap(p, force: bool = False) -> bytes:
@@ -207,7 +343,7 @@ class BotBrowser:
                         quality=36,
                         full_page=False,
                         animations="disabled",
-                        caret="hide",
+                        caret="initial",
                         scale="css",
                         timeout=2500,
                     )
@@ -249,24 +385,57 @@ class BotBrowser:
                     if not str(url).startswith(("http://", "https://", "about:")):
                         url = "https://" + url
                     self.mark("open", True, url=str(url))
-                    p.goto(str(url), wait_until="domcontentloaded", timeout=20000)
-                    snap(p, force=True)
+                    p.goto(str(url), wait_until="domcontentloaded", timeout=12000)
+                    self.request_shot()
                     box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
                 elif cmd == "click":
                     nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
                     vp = p.viewport_size or {"width": 1280, "height": 800}
-                    p.mouse.click(nx * vp["width"], ny * vp["height"])
-                    time.sleep(0.04)
-                    snap(p, force=True)
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
+                    p.mouse.click(nx * vp["width"], ny * vp["height"], delay=0)
+                    info = _focus_info(p)
+                    self.request_shot()
+                    box["out"] = {
+                        "ok": True,
+                        "url": p.url,
+                        "bot": self.slug,
+                        "editable": bool(info.get("editable")),
+                        "tag": info.get("tag") or "",
+                    }
+                elif cmd == "mouse":
+                    action = str(args.get("action") or "click")
+                    nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
+                    vp = p.viewport_size or {"width": 1280, "height": 800}
+                    x, y = nx * vp["width"], ny * vp["height"]
+                    selected = ""
+                    if action == "down":
+                        p.mouse.move(x, y)
+                        p.mouse.down()
+                    elif action == "move":
+                        p.mouse.move(x, y)
+                    elif action in {"dbl", "dblclick"}:
+                        p.mouse.dblclick(x, y)
+                        selected = _selected_text(p)
+                        self.request_shot()
+                    elif action == "up":
+                        p.mouse.move(x, y)
+                        p.mouse.up()
+                        selected = _selected_text(p)
+                        self.request_shot()
+                    else:
+                        p.mouse.click(x, y, delay=0)
+                        self.request_shot()
+                    out = {"ok": True, "url": p.url, "bot": self.slug}
+                    if selected:
+                        out["selected"] = selected
+                    box["out"] = out
                 elif cmd == "type":
                     text = str(args.get("text") or "")
                     if text:
-                        p.keyboard.type(text, delay=0)
+                        p.keyboard.insert_text(text)
                     if args.get("submit"):
                         p.keyboard.press("Enter")
-                    snap(p, force=True)
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
+                    self.request_shot()
+                    box["out"] = {"ok": True, "url": p.url, "bot": self.slug}
                 elif cmd == "key":
                     key = str(args.get("key") or "Enter")
                     if key == "Backspace" and args.get("n"):
@@ -274,7 +443,7 @@ class BotBrowser:
                             p.keyboard.press("Backspace")
                     else:
                         p.keyboard.press(key)
-                    snap(p, force=True)
+                    self.request_shot()
                     box["out"] = {"ok": True, "bot": self.slug}
                 elif cmd == "scroll":
                     nx, ny = float(args.get("nx", 0.5)), float(args.get("ny", 0.5))
@@ -283,11 +452,11 @@ class BotBrowser:
                     vp = p.viewport_size or {"width": 1280, "height": 800}
                     p.mouse.move(nx * vp["width"], ny * vp["height"])
                     p.mouse.wheel(dx, dy)
-                    snap(p, force=True)
+                    self.request_shot()
                     box["out"] = {"ok": True, "bot": self.slug}
                 elif cmd == "back":
-                    p.go_back(wait_until="domcontentloaded", timeout=12000)
-                    snap(p, force=True)
+                    p.go_back(wait_until="domcontentloaded", timeout=8000)
+                    self.request_shot()
                     box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
                 elif cmd == "front":
                     p.bring_to_front()
@@ -320,10 +489,24 @@ class BotBrowser:
                     sel = str(args.get("selector") or "").strip()
                     if not sel:
                         raise RuntimeError("no selector")
-                    p.click(sel, timeout=6000)
-                    time.sleep(0.04)
-                    snap(p, force=True)
-                    box["out"] = {"ok": True, "url": p.url, "title": p.title(), "bot": self.slug}
+                    p.click(sel, timeout=2500, no_wait_after=True)
+                    self.request_shot()
+                    box["out"] = {"ok": True, "url": p.url, "bot": self.slug}
+                elif cmd == "state":
+                    incoming = args.get("cookies")
+                    if incoming is not None:
+                        cookies = _clean_cookies(incoming)
+                        if cookies:
+                            p.context.add_cookies(cookies)
+                        box["out"] = {"ok": True, "n": len(cookies), "bot": self.slug}
+                    else:
+                        st = p.context.storage_state()
+                        box["out"] = {
+                            "ok": True,
+                            "cookies": st.get("cookies") or [],
+                            "bot": self.slug,
+                            "url": p.url,
+                        }
                 elif cmd == "eval":
                     js = str(args.get("js") or "")
                     if not js:
@@ -350,9 +533,8 @@ class BotBrowser:
                         if not Path(fp).is_file():
                             raise RuntimeError(f"missing file: {fp}")
                     loc = p.locator(sel).first
-                    loc.set_input_files(paths, timeout=8000)
-                    time.sleep(0.12)
-                    snap(p, force=True)
+                    loc.set_input_files(paths, timeout=4000)
+                    self.request_shot()
                     box["out"] = {
                         "ok": True,
                         "n": len(paths),
@@ -379,19 +561,22 @@ class BotBrowser:
 
     def snapper(self) -> None:
         while True:
-            time.sleep(0.7)
+            time.sleep(0.18)
             st = self.health()
             now = time.time()
             age = now - float(st.get("at") or 0)
             shot_age = now - float(st.get("shot_at") or 0)
-            if not st.get("busy") and age > 20:
+            want = bool(st.get("want_shot"))
+            if not want and not st.get("busy") and age > 12:
                 continue
-            if shot_age < SHOT_TTL:
+            if not want and shot_age < SHOT_TTL:
                 continue
             if not self.jobs.empty():
                 continue
             try:
-                self.call("snap", timeout=6)
+                self.call("snap", timeout=3)
+                with self.lock:
+                    self.state["want_shot"] = False
             except Exception:
                 pass
 
@@ -432,6 +617,7 @@ def cached_health(bot: str | None = None) -> dict:
         }
     out = dict(pick)
     out["bots"] = list(live)
+    out["pages"] = {k: {"url": v.get("url") or "", "title": v.get("title") or ""} for k, v in live.items()}
     return out
 
 
@@ -791,11 +977,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path in {"/shot", "/frame"}:
                 data = cached_shot(bot)
-                if data:
-                    self._bytes(data, "image/jpeg")
-                    return
-                got = call("shot", timeout=12, bot=bot)
-                self._bytes(got.get("bytes") or b"", "image/jpeg")
+                if not data:
+                    bb = _existing(bot)
+                    if bb:
+                        bb.request_shot()
+                self._bytes(data or b"", "image/jpeg")
                 return
             self._json({"error": "not found"}, 404)
         except Exception as e:
@@ -830,7 +1016,17 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 self._bytes(audio, ctype)
                 return
-            if path in {"open", "click", "type", "key", "back", "front", "read", "sel", "scroll", "eval", "files"}:
+            if path == "authcopy":
+                src = normalize_bot(body.get("from") or DEFAULT_BOT)
+                cookies = _clean_cookies((call("state", bot=src)["out"] or {}).get("cookies") or [])
+                call("state", {"cookies": cookies}, bot=bot)
+                url = str(body.get("url") or "").strip()
+                extra = {}
+                if url:
+                    extra = call("open", {"url": url}, bot=bot)["out"] or {}
+                self._json({"ok": True, "n": len(cookies), "bot": bot, "from": src, **extra})
+                return
+            if path in {"open", "click", "type", "key", "back", "front", "read", "sel", "scroll", "eval", "files", "mouse", "state"}:
                 self._json(call(path, body, bot=bot)["out"])
                 return
             self._json({"error": "not found"}, 404)
